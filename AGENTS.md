@@ -25,6 +25,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `cmd/crew/` | The CLI entry point |
 | `internal/` | CLI implementation packages |
 | `profiles/` | Built-in profiles, embedded into the binary |
+| `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 
 ## Building and testing
 
