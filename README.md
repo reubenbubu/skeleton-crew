@@ -159,12 +159,17 @@ effort = "high"
 [models]
 reviewer = 2   # rank the Reviewer always uses
 max_tier = 3   # escalation stops here; defaults to the highest rank
+
+[escalation]
+top_attempts = 2   # retries at max_tier before the ticket comes to you
 ```
 
 - Ranks run from 1 upwards with no gaps. You may define as many as you like; `crew doctor` checks the list.
 - `name` is optional. It helps the DM and you tell ranks apart.
 - Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one rank automatically.
-- When a ticket fails at `max_tier`, the DM decides what to do: split the ticket, rethink the approach, or ask you.
+- When a ticket fails at `max_tier`, the DM decides what to do: rethink the approach and retry, split the ticket, or ask you.
+- Retries at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew` counts them from the ticket's label history. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` comment summarising what was tried, so the ticket comes to you.
+- Splitting does not use the retry budget, because it changes the plan. The new tickets start at rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
 - You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
 - `crew init` fills in default models for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
