@@ -349,7 +349,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew ticket new` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
-| `crew ticket edit <n>` | Changes body, priority, kind or dependencies; no stage change |
+| `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change |
 | `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without acceptance criteria |
 
 ### Lead DM
