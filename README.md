@@ -45,7 +45,7 @@ The bootstrap block never fetches anything from a moving branch, and it shows th
 ### What `crew init` does
 
 1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
-2. **Labels:** creates the `stage:`, `priority:`, `kind:` and `tier:` labels and `blocked`. Running it again is safe.
+2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
 3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, and seeds `.crew/docs/` from the profile.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
 5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
@@ -75,6 +75,7 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 | `priority:` | `low`, `medium`, `high`, `critical` |
 | `kind:` | `feature`, `fix`, `chore` |
 | `tier:` | The rank of the tier used for the current attempt, for example `tier:2` |
+| `testing:` | Optional: overrides the project's testing level for this ticket |
 | `blocked` | Optional flag: waiting on something external or on you |
 
 `critical` exists only to skip the queue. Agents set it only when you explicitly ask for it.
@@ -189,6 +190,27 @@ top_attempts = 2   # retries at max_tier before the ticket comes to you
 - `crew init` fills in default models for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
 - If a harness cannot set effort per subagent, only the model applies. If it cannot set the model either, every agent uses the session's settings.
+
+## Testing
+
+Agents tend to write too many tests. You choose how much testing the crew adds, in `.crew/crew.toml`:
+
+```toml
+[testing]
+level = "standard"   # minimal | standard | thorough
+```
+
+| Level | Devs write |
+| --- | --- |
+| `minimal` | One test per acceptance criterion, happy path only. No tests for trivial code such as getters, wiring or configuration. |
+| `standard` | Each acceptance criterion, plus the error paths and edge cases that could realistically break. Unit tests only for non-trivial logic. |
+| `thorough` | Everything in `standard`, plus boundary values, failure modes and integration tests across components. |
+
+- Every test names the acceptance criterion or risk it covers. A test without a reason is excess.
+- The level is part of every Dev and Reviewer briefing.
+- The Reviewer rejects missing coverage **and** over-testing: redundant cases, tests of trivial code, or tests beyond the level.
+- A ticket can override the project level with a `testing:` label, for example `testing:thorough` on a payment ticket. The PM or DM sets it when you ask, and the DM may raise it for clearly risky work.
+- You can also just tell the DM, for example "keep tests lean".
 
 ## Review and merge
 
