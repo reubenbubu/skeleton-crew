@@ -12,6 +12,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 - **Harness-neutral.** Assume only that a harness reads `AGENTS.md`, runs shell commands and can start subagents. Never require harness plugins, hooks or MCP servers.
 - **Stack-agnostic core.** Language and framework knowledge belongs in profiles, never in the core.
 - **Every command earns its place.** The number of `crew` commands does not matter; each must have a clear purpose.
+- **Never a victim of its own workings.** No lock, limit or internal state may leave the crew unable to progress. Every one needs a recovery path that takes at most a confirmation from the user.
 - **Zero tinkering for users.** Defaults must work. Users should never need to edit prompts or configuration.
 - **Stand alone.** Describe what Skeleton Crew is. Do not refer to earlier projects, prior versions or the history of the design.
 

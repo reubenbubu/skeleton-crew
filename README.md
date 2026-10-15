@@ -201,6 +201,41 @@ The local repository always matches GitHub.
 - Local `main` is never committed to. It only fast-forwards to `origin/main`. If it has diverged, `crew` refuses and reports why.
 - Every commit `crew` makes on a ticket branch is pushed immediately, so a lost session loses no work.
 
+## Lead DM and conversational DMs
+
+You can have several DM sessions open at once, but only one of them, the **lead**, acts on work.
+
+- A DM session starts with `crew dm claim`. If no one holds the lead, it gets it, along with a token that its lead-only commands carry.
+- Only the lead starts Devs and Reviewers, merges, cancels and runs recovery. `crew` refuses these from any other session with `not-lead`.
+- Every other DM is **conversational**. It discusses implementation with you, records decisions, creates tickets from your requests and opens knowledge-only PRs. It never starts or merges work.
+- `crew dm release` gives up the lead when the lead session ends normally.
+
+### The lead can never lock the system
+
+No internal mechanism may stop the crew from making progress. For the lead this means:
+
+- **Takeover always works.** Any DM can take the lead with `crew dm claim --takeover` once you confirm. The old token stops working immediately. A dead session or a lost token costs at most one confirmation from you.
+- A lead that has lost its own token takes over from itself the same way.
+- If the old lead was still alive, its next lead-only command gets `not-lead` and it continues as a conversational DM. No work is lost, because all state is on GitHub.
+- Every state change is a check-and-set on the stage label, such as "move #12 from 5 to 6 only if it is still at 5". If two DMs race during a takeover, one succeeds and the other gets `stage-changed`. Nothing happens twice.
+- A missing or unreadable lock file counts as "no lead", with a warning, so the next claim succeeds.
+- `crew` never decides on its own that a session is dead. Nothing moves without an open session, and an open session means you are there to confirm.
+
+## Session recovery
+
+Devs and Reviewers run inside the lead DM's harness session and stop when it ends. Every commit is pushed immediately and every stage is a label, so GitHub always holds the full state. When a lead DM starts, `crew status` proposes one action per ticket:
+
+| Found at | Recovery |
+| --- | --- |
+| `4:in-progress` | Start a new Dev at the same rank. An interrupted session is not a failed attempt. The Dev continues from the branch, the ticket comments and the existing worktree, so uncommitted edits survive. |
+| `4:waiting-review` | Start a Reviewer. |
+| `4:review-rejected` | Start a Dev one rank up, as normal escalation. |
+| `5:review-approved` | Queue the merge. |
+| `6:pending-merge` | Run the gate again if `main` has moved, then merge. |
+| `7:merged`, `8:deploying` | Read the deployment workflow's status and advance. |
+
+Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed.
+
 ## Profiles and containers
 
 The core of Skeleton Crew knows nothing about languages or frameworks. A **profile** describes a stack:
@@ -239,5 +274,4 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 - The bootstrap conversation in detail: `crew init`, labels and repository setup.
 - The full `crew` command list and its output contract.
-- Session recovery: what the DM does at startup when tickets are mid-flight.
 - Where project knowledge lives and how briefings select from it.
