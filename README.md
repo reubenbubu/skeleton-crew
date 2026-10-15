@@ -59,7 +59,7 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 | `stage:N:slug` | Exactly one; see [Ticket lifecycle](#ticket-lifecycle) |
 | `priority:` | `low`, `medium`, `high`, `critical` |
 | `kind:` | `feature`, `fix`, `chore` |
-| `tier:` | The model tier used for the current attempt |
+| `tier:` | The rank of the tier used for the current attempt, for example `tier:2` |
 | `blocked` | Optional flag: waiting on something external or on you |
 
 `critical` exists only to skip the queue. Agents set it only when you explicitly ask for it.
@@ -138,31 +138,35 @@ A `critical` ticket gets one extra slot immediately when all slots are busy. Not
 
 ## Models
 
-The DM chooses a tier for each Dev based on the ticket's complexity. A tier is a model plus an effort level. You control the cost and quality trade-off in `crew.toml`:
+The DM chooses a tier for each Dev based on the ticket's complexity. A tier is a numbered rank with a model and an effort level. You control the cost and quality trade-off in `crew.toml`. These are the defaults:
 
 ```toml
-[tiers.light]
+[tiers.1]
+name   = "light"
 model  = "<model id>"
 effort = "medium"
 
-[tiers.standard]
+[tiers.2]
+name   = "standard"
 model  = "<model id>"
 effort = "medium"
 
-[tiers.heavy]
+[tiers.3]
+name   = "heavy"
 model  = "<model id>"
 effort = "high"
 
 [models]
-reviewer = "standard"   # tier the Reviewer always uses
-max_tier = "heavy"      # escalation stops here
+reviewer = 2   # rank the Reviewer always uses
+max_tier = 3   # escalation stops here; defaults to the highest rank
 ```
 
-- You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
-- `crew init` fills in defaults for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use heavy for #12".
-- The tiers form a ladder in the order they appear in `crew.toml`. You can define more or fewer tiers.
-- Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one tier automatically.
+- Ranks run from 1 upwards with no gaps. You may define as many as you like; `crew doctor` checks the list.
+- `name` is optional. It helps the DM and you tell ranks apart.
+- Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one rank automatically.
 - When a ticket fails at `max_tier`, the DM decides what to do: split the ticket, rethink the approach, or ask you.
+- You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
+- `crew init` fills in default models for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
 - If a harness cannot set effort per subagent, only the model applies. If it cannot set the model either, every agent uses the session's settings.
 
