@@ -104,7 +104,7 @@ stage=4:in-progress priority=high kind=feature tier=standard pr=#31
 --- comments
 [decision] DM 2026-10-15T08:10Z: Reuse the session table; no new migration.
 [question] DEV 2026-10-15T08:52Z: Should expired links show an error page or redirect?
-reuben 2026-10-15T09:30Z: Redirect to login with a notice.
+[human] user 2026-10-15T09:30Z: Redirect to login with a notice.
 ```
 
 Routine progress is recorded as label changes, which GitHub keeps in the issue timeline, not as comments. Agents post comments only through `crew ticket comment --kind <kind>`. The kind is stored as an invisible marker in the comment:
