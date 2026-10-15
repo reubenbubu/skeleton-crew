@@ -6,11 +6,11 @@ This project is run by Skeleton Crew: a Project Manager, a Dev Manager, Devs and
 
 Skeleton Crew pins `crew` version `v0.1.0` (not yet released).
 
-1. Run `crew --version`. If it prints `v0.1.0`, go to [Every session](#every-session).
+1. Run `crew --version`. If it prints `v0.1.0`, go to step 3.
 2. Otherwise, ask the user how to install `crew`. Show them the exact command before running it:
    - **GitHub release (default):** download the `v0.1.0` binary from <https://github.com/reubenbubu/skeleton-crew/releases/tag/v0.1.0>, then verify its checksum and its GitHub artifact attestation before installing it.
    - **Build from source:** clone tag `v0.1.0` of <https://github.com/reubenbubu/skeleton-crew> and run its self-build script, which builds inside the official Go container image.
-3. If the project has no `.crew/crew.toml`, ask the user which profile it uses (`python`, `node-ts`, `java-spring`, or a description of their own stack), then run `crew init` with their answers.
+3. If the project has no `.crew/crew.toml`, ask the user which profile it uses (`python`, `node-ts`, `java-spring`, or a description of their own stack), then run `crew init` with their answers. Otherwise go to [Every session](#every-session).
 
 Never fetch Skeleton Crew from a branch, and never run a command the user has not seen.
 
