@@ -308,8 +308,66 @@ AGENTS.md                 the seed file
 
 ## The `crew` CLI
 
-`crew` is a single Go binary with no runtime dependencies. Built-in profiles, templates and role rules are embedded in it, so no framework code is copied into your project. Commands print terse, stable output for agents, and structured output with `--json`.
+`crew` is a single Go binary with no runtime dependencies. Built-in profiles, templates and role rules are embedded in it, so no framework code is copied into your project. Commands print terse, stable output for agents, and structured output with `--json`. Times are absolute UTC timestamps.
 
-## Not yet designed
+There is no generic "set stage" command. Each stage change has exactly one command, and that command checks that the move is legal. This is how `crew` keeps stage numbers from going backwards.
 
-- The full `crew` command list and its output contract.
+### Setup
+
+| Command | Does |
+| --- | --- |
+| `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
+| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks and knowledge size; runs one gate |
+| `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
+| `crew brief <role> [<ticket>]` | Prints an agent's briefing, with the model and effort to use |
+
+### Project Manager
+
+| Command | Stage change |
+| --- | --- |
+| `crew ticket new` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake` |
+| `crew ticket triage <n>` | `1:intake` to `2:drafting` |
+| `crew ticket edit <n>` | Changes body, priority, kind or dependencies; no stage change |
+| `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without acceptance criteria |
+
+### Lead DM
+
+| Command | Stage change |
+| --- | --- |
+| `crew dm claim [--takeover]` | Takes the lead |
+| `crew dm release` | Gives up the lead |
+| `crew status` | Shows the board, stale handoffs and recovery proposals; advances `7:merged` to `8:deploying` to `9:done` from the deployment workflow |
+| `crew ticket next` | Lists eligible tickets in order |
+| `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
+| `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
+| `crew ticket split <n>` | Creates child tickets and cancels the parent |
+| `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`; gates again if `main` moved, then fast-forwards `main` |
+| `crew ticket cancel <n>` | Any open stage to `0:cancelled` |
+
+### Dev
+
+Run inside the ticket's worktree.
+
+| Command | Does |
+| --- | --- |
+| `crew commit "<message>"` | Commits and pushes immediately; adds the ticket reference to the message |
+| `crew env up`, `crew env down`, `crew env logs` | Manages the ticket's compose project |
+| `crew run <command>` | Runs a profile command, such as `test` or `build`, in its container |
+| `crew ticket submit` | Runs the gate on the exact pushed commit; `4:in-progress` to `4:waiting-review` on success |
+| `crew ticket stuck "<reason>"` | `4:in-progress` to `4:review-rejected`; counts as a failed attempt |
+
+### Reviewer
+
+| Command | Stage change |
+| --- | --- |
+| `crew review <n> --approve` | Posts the PR review; `4:waiting-review` to `5:review-approved` |
+| `crew review <n> --reject "<reason>"` | Posts the PR review; `4:waiting-review` to `4:review-rejected` |
+
+### Anyone
+
+| Command | Does |
+| --- | --- |
+| `crew ticket list` | One line per ticket |
+| `crew ticket show <n> [--all]` | The terse ticket view |
+| `crew ticket comment <n> --kind <kind>` | Posts a tagged comment |
+| `crew ticket block <n> "<reason>"`, `crew ticket unblock <n>` | Sets or clears the `blocked` flag |
