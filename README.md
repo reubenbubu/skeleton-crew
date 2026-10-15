@@ -127,7 +127,7 @@ Routine progress is recorded as label changes, which GitHub keeps in the issue t
 
 ## Parallelism
 
-Several Devs can work at once, up to a cap in `crew.toml` (default 3). Each ticket in flight has its own:
+Several Devs can work at once, up to a cap in `.crew/crew.toml` (default 3). Each ticket in flight has its own:
 
 - git worktree and branch,
 - compose project (`crew-<ticket>`) with automatically assigned ports.
@@ -138,7 +138,7 @@ A `critical` ticket gets one extra slot immediately when all slots are busy. Not
 
 ## Models
 
-The DM chooses a tier for each Dev based on the ticket's complexity. A tier is a numbered rank with a model and an effort level. You control the cost and quality trade-off in `crew.toml`. These are the defaults:
+The DM chooses a tier for each Dev based on the ticket's complexity. A tier is a numbered rank with a model and an effort level. You control the cost and quality trade-off in `.crew/crew.toml`. These are the defaults:
 
 ```toml
 [tiers.1]
@@ -259,12 +259,36 @@ Skeleton Crew never deploys anything itself. A profile may include a GitHub Acti
 You never need to edit configuration or prompts. Everything works with defaults, and the agents adapt to your project as they go.
 
 - **Rules** are built into `crew` and delivered through `crew brief <role>`. They cover role duties, the workflow and the hard rules. Agents cannot change them; they change only with a new release.
-- **Project knowledge** lives in the repository and is written by the agents: architecture notes, conventions, gotchas, decisions, a product glossary and your stated preferences.
-  - Devs add what they learn in their ticket's PR.
-  - The DM records decisions from conversations with you in knowledge-only PRs.
-  - Knowledge is curated, not an append-only log, and kept within a size budget.
-- `crew brief dev <ticket>` includes the relevant knowledge, so every new agent starts informed.
+- **Project knowledge** is written by the agents as work happens. Devs add what they learn in their ticket's PR, and the Reviewer checks it with the code. The DM records decisions from conversations with you in knowledge-only PRs.
 - If project knowledge contradicts a built-in rule, the rule wins, and `crew doctor` reports the conflict.
+
+### Layout
+
+Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project:
+
+```
+AGENTS.md                 the seed file
+.crew/
+  crew.toml               configuration
+  docs/
+    product.md            PM: what the product is, its users, glossary, your standing preferences
+    architecture.md       DM: modules, boundaries, data model
+    conventions.md        DM: coding patterns, naming, testing style, gotchas
+    adr/                  DM: one short architecture decision record per decision
+      0001-<slug>.md
+```
+
+- `crew init` seeds these files from the chosen profile.
+- The PM owns `product.md`. The DM curates the rest.
+- Knowledge is curated, not an append-only log. `product.md`, `architecture.md` and `conventions.md` together stay within a size budget. `crew doctor` warns when they exceed it, and the DM condenses them, moving detail into ADRs.
+- To make the crew use your own documentation, such as an existing `docs/` folder, ask the DM. It records an ADR that tells agents where those documents are and when to read them.
+
+### Briefings
+
+`crew brief <role> [<ticket>]` assembles everything an agent needs:
+
+- **In full:** the role rules, the ticket, `product.md`, `architecture.md` and `conventions.md`.
+- **As an index:** the ADRs, one line each with number, title and summary. The agent opens the ones relevant to its work.
 
 ## The `crew` CLI
 
@@ -274,4 +298,3 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 - The bootstrap conversation in detail: `crew init`, labels and repository setup.
 - The full `crew` command list and its output contract.
-- Where project knowledge lives and how briefings select from it.
