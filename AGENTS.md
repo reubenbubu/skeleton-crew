@@ -32,7 +32,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 
 ## Output contract
 
-`crew` output is for agents. Keep it terse and stable: no API structure, IDs, colours or decoration. Provide `--json` for structured output. Never alter ticket bodies or comments.
+`crew` output is for agents. Keep it terse and stable: no API structure, IDs, colours or decoration. Times are absolute UTC timestamps, never relative. Provide `--json` for structured output. Never alter ticket bodies or comments.
 
 ## Security
 

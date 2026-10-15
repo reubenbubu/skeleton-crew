@@ -85,13 +85,13 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 
 - Without continuous deployment, a ticket goes from `7:merged` straight to `9:done`.
 - `blocked` is a flag, not a stage. A blocked ticket keeps its stage and is skipped by selection.
-- Every stage has one owner and an expected dwell time. `crew status` flags tickets that sit too long, for example `#12 4:waiting-review 45m: no reviewer`. This catches dropped handoffs without any background process.
+- Every stage has one owner and an expected dwell time. `crew status` flags tickets that sit too long, for example `#12 4:waiting-review since 2026-10-15T09:12Z: no reviewer`. This catches dropped handoffs without any background process.
 - **Merge conflicts** at `6:pending-merge` stay at stage 6. The DM resolves trivial conflicts such as lockfiles and version lines itself. Otherwise it starts a Dev for the rebase fix. If resolving the conflict would change behaviour, the DM cancels the ticket and opens a new one.
 - **Deployment failures:** if the pipeline or environment failed, the DM triages it and asks you only for credentials. If the code caused it, the original ticket goes to `9:done` and the DM opens a linked `fix` ticket at `high`. Fixes always go forward.
 
 ### Comments and terse views
 
-Agents never call the GitHub API or `gh` directly. They go through `crew`, which returns compact views. It drops node IDs, URLs, label colours, reactions and other API structure. Labels become fields such as `stage=4:in-progress`. Ticket bodies and comments are never altered.
+Agents never call the GitHub API or `gh` directly. They go through `crew`, which returns compact views. It drops node IDs, URLs, label colours, reactions and other API structure. Labels become fields such as `stage=4:in-progress`. Times are absolute UTC timestamps, never relative ("2h ago" goes stale as soon as it is read). Ticket bodies and comments are never altered.
 
 ```
 $ crew ticket show 12
@@ -100,11 +100,11 @@ stage=4:in-progress priority=high kind=feature tier=standard pr=#31
 ---
 <body, verbatim>
 --- timeline
-10-14 eligible · 10-15 in-progress · 10-15 PR #31
+2026-10-14T16:40Z eligible · 2026-10-15T08:05Z in-progress · 2026-10-15T09:12Z PR #31
 --- comments
-[decision] DM 2h ago: Reuse the session table; no new migration.
-[question] DEV 1h ago: Should expired links show an error page or redirect?
-reuben 40m ago: Redirect to login with a notice.
+[decision] DM 2026-10-15T08:10Z: Reuse the session table; no new migration.
+[question] DEV 2026-10-15T08:52Z: Should expired links show an error page or redirect?
+reuben 2026-10-15T09:30Z: Redirect to login with a notice.
 ```
 
 Routine progress is recorded as label changes, which GitHub keeps in the issue timeline, not as comments. Agents post comments only through `crew ticket comment --kind <kind>`. The kind is stored as an invisible marker in the comment:
