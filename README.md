@@ -96,7 +96,7 @@ Agents never call the GitHub API or `gh` directly. They go through `crew`, which
 ```
 $ crew ticket show 12
 #12 Login with email
-stage=4:in-progress priority=high kind=feature tier=standard pr=#31
+stage=4:in-progress priority=high kind=feature tier=2 pr=#31
 ---
 <body, verbatim>
 --- timeline
