@@ -46,7 +46,7 @@ The bootstrap block never fetches anything from a moving branch, and it shows th
 
 1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, and seeds `.crew/docs/` from the profile.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
 5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -73,7 +73,7 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 | --- | --- |
 | `stage:N:slug` | Exactly one; see [Ticket lifecycle](#ticket-lifecycle) |
 | `priority:` | `low`, `medium`, `high`, `critical` |
-| `kind:` | `feature`, `fix`, `chore` |
+| `kind:` | `feat`, `fix`, `chore` |
 | `tier:` | The rank of the tier used for the current attempt, for example `tier:2` |
 | `testing:` | Optional: overrides the project's testing level for this ticket |
 | `blocked` | Optional flag: waiting on something external or on you |
@@ -112,7 +112,7 @@ Agents never call the GitHub API or `gh` directly. They go through `crew`, which
 ```
 $ crew ticket show 12
 #12 Login with email
-stage=4:in-progress priority=high kind=feature tier=2 pr=#31
+stage=4:in-progress priority=high kind=feat tier=2 pr=#31
 ---
 <body, verbatim>
 --- timeline
@@ -145,7 +145,7 @@ Routine progress is recorded as label changes, which GitHub keeps in the issue t
 
 Several Devs can work at once, up to a cap in `.crew/crew.toml` (default 3). Each ticket in flight has its own:
 
-- git worktree and branch,
+- git branch and worktree; see [Conventions](#conventions),
 - compose project (`crew-<ticket>`) with automatically assigned ports.
 
 Merges into `main` happen one at a time. The DM rebases the remaining PRs when `main` moves.
@@ -212,6 +212,51 @@ level = "standard"   # minimal | standard | thorough
 - A ticket can override the project level with a `testing:` label, for example `testing:thorough` on a payment ticket. The PM or DM sets it when you ask, and the DM may raise it for clearly risky work.
 - You can also just tell the DM, for example "keep tests lean".
 
+## Test-driven development
+
+Agents make mistakes, and tests written first are the guardrail that catches them. TDD is mandatory at every testing level. The level only decides how many tests go beyond the acceptance criteria.
+
+### The PM sets the expectations
+
+- Every ticket has acceptance criteria with IDs that are unique across the project, such as `#12-AC1` and `#12-AC2`.
+- Criteria describe observable behaviour, not implementation, so they can be tested.
+- `crew ticket ready` refuses a ticket without them.
+- The PM never renumbers criteria. A changed requirement revises or removes a criterion, and the tests that cover it are updated in the same ticket.
+
+### Devs write failing tests first
+
+`crew` checks each TDD step by running the tests, not by trusting the commit message:
+
+| Command | `crew` requires |
+| --- | --- |
+| `crew commit --red "<message>"` | The commit changes only test files, and the tests **fail** |
+| `crew commit --green "<message>"` | The tests pass |
+| `crew commit --refactor "<message>"` | The tests stay green, and no behaviour tests are added |
+
+- Every test names the criterion it covers, such as `#12-AC1`.
+- At `crew ticket submit`, the gate checks that every criterion of the ticket has a test that failed before it passed.
+- `crew` keeps the failure output of each red step. The Reviewer checks that the test failed for the right reason: an assertion about the behaviour, not a typo or a missing import.
+- Changes with no behaviour, such as documentation, configuration and knowledge files, use a plain `crew commit`. The Reviewer judges whether a change really has no behaviour.
+- Red and green steps run the profile's fast `test-changed` command. The full suite runs at the gate.
+
+### Obsolete tests are maintained
+
+- Tests name their criteria, so `crew` finds tests whose criterion was removed, revised or belongs to a cancelled ticket. The gate flags them, and the ticket that changed the requirement updates or deletes them in the same PR.
+- The gate refuses skipped or disabled tests.
+- A commit that changes or deletes an existing test must give the reason, such as the criterion revision. The Reviewer rejects any test weakened just to make it pass.
+
+## Conventions
+
+| Item | Format | Example |
+| --- | --- | --- |
+| Branch | `<kind>/<ticket>/<slug>` | `feat/12/login-with-email` |
+| Worktree | `.crew/worktrees/<kind>/<ticket>/<slug>` | `.crew/worktrees/feat/12/login-with-email` |
+| Commit | `[<kind>:#<ticket>] <phase>: <message>` | `[feat:#12] red: login rejects an unknown email` |
+
+- `<kind>` is `feat`, `fix` or `chore`.
+- `<phase>` is `red`, `green` or `refactor`, and is left out for changes with no behaviour.
+- `crew` creates branches and worktrees and writes the commit prefix, so agents never type it. `#<ticket>` makes GitHub link the commit to the issue.
+
 ## Review and merge
 
 - Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning.
@@ -277,7 +322,8 @@ Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed
 
 The core of Skeleton Crew knows nothing about languages or frameworks. A **profile** describes a stack:
 
-- commands: `setup`, `test`, `build`, `run`, `health`
+- commands: `setup`, `test`, `test-changed` (only the tests affected by a change, for fast TDD cycles), `build`, `run`, `health`
+- globs that identify test files
 - a `Containerfile` and a `compose.yaml` for the app and its services
 - an optional deployment workflow (GitHub Actions)
 - default conventions and architecture decisions
@@ -327,6 +373,7 @@ AGENTS.md                 the seed file
 
 - **In full:** the role rules, the ticket, `product.md`, `architecture.md` and `conventions.md`.
 - **As an index:** the ADRs, one line each with number, title and summary. The agent opens the ones relevant to its work.
+- **Code search:** if the harness provides a code index or code search tool, agents prefer it for finding code and fall back to plain search. `crew` does not detect such tools; subagents normally inherit them from the harness. Results must point into the agent's own worktree. An index of the main checkout shows `main`, not the ticket's branch, so the agent re-indexes its worktree or reads the files directly.
 
 ## The `crew` CLI
 
@@ -350,7 +397,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew ticket new` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
 | `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change |
-| `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without acceptance criteria |
+| `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without numbered acceptance criteria |
 
 ### Lead DM
 
@@ -372,7 +419,8 @@ Run inside the ticket's worktree.
 
 | Command | Does |
 | --- | --- |
-| `crew commit "<message>"` | Commits and pushes immediately; adds the ticket reference to the message |
+| `crew commit --red\|--green\|--refactor "<message>"` | Checks the TDD phase, commits and pushes immediately; see [Test-driven development](#test-driven-development) |
+| `crew commit "<message>"` | Commits a change with no behaviour, such as documentation or configuration, and pushes immediately |
 | `crew env up`, `crew env down`, `crew env logs` | Manages the ticket's compose project |
 | `crew run <command>` | Runs a profile command, such as `test` or `build`, in its container |
 | `crew ticket submit` | Runs the gate on the exact pushed commit; `4:in-progress` to `4:waiting-review` on success |
