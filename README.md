@@ -86,7 +86,7 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 
 | Stage | Owner | Meaning |
 | --- | --- | --- |
-| `1:intake` | PM | Created, for example by you on GitHub; waiting for the PM |
+| `1:intake` | PM | Created, for example by you on GitHub; waiting for the PM. `crew status` labels new unlabelled issues with this stage. |
 | `2:drafting` | PM | The PM is refining it, alone or with you |
 | `3:eligible` | DM | Ready to be worked on |
 | `4:in-progress` | Dev | A Dev is implementing it |
@@ -133,9 +133,19 @@ Routine progress is recorded as label changes, which GitHub keeps in the issue t
 
 `--all` shows the full thread.
 
+## Status
+
+`crew status` shows each role what needs its attention. The PM and the DM run it at the start of every session.
+
+- **Everyone:** questions waiting for you, from `blocked` tickets and tickets that reached the escalation limit.
+- **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions that may affect requirements.
+- **Lead DM:** the board, stale handoffs and recovery proposals. It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
+
+Open issues without a stage label, such as issues you create on GitHub, are labelled `1:intake` the first time `crew status` sees them.
+
 ## Selecting work
 
-`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done. They are sorted by priority, then by age.
+`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done. Dependencies use GitHub's own issue dependencies ("blocked by"), which `crew ticket edit` sets. They are sorted by priority, then by age.
 
 - By default the DM takes the first one.
 - The DM may skip down the list when the top ticket would collide with work in flight, for example two tickets that both change the same module. It records the reason as a `log` comment.
@@ -148,7 +158,7 @@ Several Devs can work at once, up to a cap in `.crew/crew.toml` (default 3). Eac
 - git branch and worktree; see [Conventions](#conventions),
 - compose project (`crew-<ticket>`) with automatically assigned ports.
 
-Merges into `main` happen one at a time. The DM rebases the remaining PRs when `main` moves.
+Merges into `main` happen one at a time. Branches are rebased only at merge time, at `6:pending-merge`. Devs never rebase while they work.
 
 A `critical` ticket gets one extra slot immediately when all slots are busy. Nothing in flight is interrupted.
 
@@ -185,7 +195,7 @@ top_attempts = 2   # retries at max_tier before the ticket comes to you
 - Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one rank automatically.
 - When a ticket fails at `max_tier`, the DM decides what to do: rethink the approach and retry, split the ticket, or ask you.
 - Retries at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew` counts them from the ticket's label history. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` comment summarising what was tried, so the ticket comes to you.
-- Splitting does not use the retry budget, because it changes the plan. The new tickets start at rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
+- Splitting does not use the retry budget, because it changes the plan. The new tickets start at `2:drafting`, so the PM writes their acceptance criteria, and their first attempt uses rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
 - You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
 - `crew init` fills in default models for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
@@ -235,7 +245,7 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 
 - Every test names the criterion it covers, such as `#12-AC1`.
 - At `crew ticket submit`, the gate checks that every criterion of the ticket has a test that failed before it passed.
-- `crew` keeps the failure output of each red step. The Reviewer checks that the test failed for the right reason: an assertion about the behaviour, not a typo or a missing import.
+- `crew` records each red result as a `log` comment on the ticket, with the test names and a failure excerpt. The record is keyed by test, not by commit, so it survives rebases. The Reviewer checks that the test failed for the right reason: an assertion about the behaviour, not a typo or a missing import.
 - Changes with no behaviour, such as documentation, configuration and knowledge files, use a plain `crew commit`. The Reviewer judges whether a change really has no behaviour.
 - Red and green steps run the profile's fast `test-changed` command. The full suite runs at the gate.
 
@@ -405,11 +415,10 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew dm claim [--takeover]` | Takes the lead |
 | `crew dm release` | Gives up the lead |
-| `crew status` | Shows the board, stale handoffs and recovery proposals; advances `7:merged` to `8:deploying` to `9:done` from the deployment workflow |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
-| `crew ticket split <n>` | Creates child tickets and cancels the parent |
+| `crew ticket split <n>` | Creates child tickets at `2:drafting`, for the PM to complete, and cancels the parent |
 | `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`; gates again if `main` moved, then fast-forwards `main` |
 | `crew ticket cancel <n>` | Any open stage to `0:cancelled` |
 
@@ -437,6 +446,7 @@ Run inside the ticket's worktree.
 
 | Command | Does |
 | --- | --- |
+| `crew status` | Shows what needs the caller's attention; see [Status](#status) |
 | `crew ticket list` | One line per ticket |
 | `crew ticket show <n> [--all]` | The terse ticket view |
 | `crew ticket comment <n> --kind <kind>` | Posts a tagged comment |
