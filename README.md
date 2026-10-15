@@ -42,6 +42,21 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
 
+### What `crew init` does
+
+1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
+2. **Labels:** creates the `stage:`, `priority:`, `kind:` and `tier:` labels and `blocked`. Running it again is safe.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, and seeds `.crew/docs/` from the profile.
+4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
+5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
+6. **Check:** runs `crew doctor`, including one gate run.
+
+### Existing projects
+
+Skeleton Crew works on a project that already has code. For an existing codebase, the agent suggests a profile from what it finds, and `crew init` skips the scaffold and keeps any existing `Containerfile` and `compose.yaml`.
+
+The DM then opens an **onboarding ticket**, which goes through the normal flow. A Dev studies the codebase and writes `architecture.md`, `conventions.md` and the first ADRs from what is really there. If the project has no `Containerfile` or `compose.yaml`, the Dev adds them, and it makes the gate pass.
+
 ### Requirements
 
 - Git, a container engine (Docker or Podman, with compose) and a GitHub account.
@@ -297,5 +312,4 @@ AGENTS.md                 the seed file
 
 ## Not yet designed
 
-- The bootstrap conversation in detail: `crew init`, labels and repository setup.
 - The full `crew` command list and its output contract.
