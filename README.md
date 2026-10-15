@@ -389,6 +389,8 @@ AGENTS.md                 the seed file
 
 `crew` is a single Go binary with no runtime dependencies. Built-in profiles, templates and role rules are embedded in it, so no framework code is copied into your project. Commands print terse, stable output for agents, and structured output with `--json`. Times are absolute UTC timestamps.
 
+`crew` does the deterministic work: the normal path and the invariants, such as stage order, the gate before merge, TDD checks, staying in sync with GitHub and keeping secrets out. When it meets something outside the normal path, such as an unusual git state or an unexpected GitHub response, it changes nothing, stops and reports what it found. The DM then handles the case with judgement. It may use `git` and `gh` directly, unlike Devs and Reviewers, but it must still respect the invariants, and it records what it did as a `decision` comment.
+
 There is no generic "set stage" command. Each stage change has exactly one command, and that command checks that the move is legal. This is how `crew` keeps stage numbers from going backwards.
 
 ### Setup
@@ -451,3 +453,21 @@ Run inside the ticket's worktree.
 | `crew ticket show <n> [--all]` | The terse ticket view |
 | `crew ticket comment <n> --kind <kind>` | Posts a tagged comment |
 | `crew ticket block <n> "<reason>"`, `crew ticket unblock <n>` | Sets or clears the `blocked` flag |
+
+## Later
+
+Low-priority features that are agreed to be useful but are not part of the first release.
+
+| Feature | Notes |
+| --- | --- |
+| Project versioning | SemVer bumps, releases and changelogs for the user's project. A profile could add them. |
+| More built-in profiles | Candidates: `go`, `static-web`. |
+| Native Windows support | A PowerShell bootstrap. Until then, Windows users use WSL. |
+| No `gh` dependency | Call the GitHub API directly from `crew`, reusing `gh`'s stored login when present. |
+| Respecting the user's CI | Optionally wait for the user's own CI checks before merging, in addition to the gate. |
+| Branch protection | Where the GitHub plan allows it, protect `main` against force pushes and deletion without blocking the DM's fast-forward merges. |
+| Review depth by risk | The Reviewer scales the depth of its review to the diff, for example a quick check for documentation and a deep one for schema or security changes. |
+| Investigator role | A read-only agent that answers "where is X" and "why does Y fail" for the DM during conversations. |
+| Harness shortcuts | Optional conveniences such as `/pm` and `/dm` commands, for harnesses that support them. `crew` never depends on them. |
+| Cost reporting | Model usage and cost per ticket, where the harness reports it. |
+| Notifications | Tell the user when a question is waiting for them, outside an open session. |
