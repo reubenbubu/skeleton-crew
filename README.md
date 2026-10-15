@@ -270,7 +270,9 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 ## Review and merge
 
 - Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning.
-- The Reviewer posts its verdict as a PR review. The verdict is advisory; the DM decides whether to merge.
+- The Reviewer posts its verdict as a PR review. The verdict is binding: an approval goes to merge, and a rejection means a new attempt.
+- A rejection the DM believes is wrong is an exception for the DM to judge, but the DM cannot overrule the Reviewer alone. It runs `crew ticket appeal <n> "<reason>"`, which moves the ticket from `4:review-rejected` back to `4:waiting-review` for a second Reviewer. That Reviewer starts fresh and sees the first rejection and the DM's reason. If it approves, the ticket goes to `5:review-approved`. If it rejects, the rejection stands.
+- An appeal is not a failed attempt and does not change the rank. Each attempt allows one appeal.
 - The gate decides whether code can merge. See [Gates](#gates).
 - The DM merges by pushing the gated commit to `main` as a fast-forward. GitHub then marks the PR as merged. There are no merge commits, and GitHub's own rebase merge is not used because it rewrites commits, so `main` would hold commits the gate never tested.
 
@@ -419,6 +421,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew dm release` | Gives up the lead |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
+| `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
 | `crew ticket split <n>` | Creates child tickets at `2:drafting`, for the PM to complete, and cancels the parent |
 | `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`; gates again if `main` moved, then fast-forwards `main` |
