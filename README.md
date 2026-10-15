@@ -46,7 +46,7 @@ The bootstrap block never fetches anything from a moving branch, and it shows th
 
 1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/` and `.crew/logs/` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
 5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -79,6 +79,24 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 | `blocked` | Optional flag: waiting on something external or on you |
 
 `critical` exists only to skip the queue. Agents set it only when you explicitly ask for it.
+
+### Ticket body
+
+`crew ticket new` writes this skeleton, and `crew ticket ready` checks that the goal and the acceptance criteria are filled in:
+
+```markdown
+## Goal
+## Acceptance criteria
+- [#12-AC1] ...
+## Out of scope
+## Assumptions
+## Non-functional
+## Risks
+```
+
+### Parent tickets
+
+The PM splits a large requirement into a parent ticket and smaller child tickets with `crew ticket new --parent <n>`. Parents use GitHub's own sub-issues. A parent has no stage, is never worked on directly, and is closed by `crew status` once all its children are done or cancelled.
 
 ### Ticket lifecycle
 
@@ -138,8 +156,8 @@ Routine progress is recorded as label changes, which GitHub keeps in the issue t
 `crew status` shows each role what needs its attention. The PM and the DM run it at the start of every session.
 
 - **Everyone:** questions waiting for you, from `blocked` tickets and tickets that reached the escalation limit.
-- **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions that may affect requirements.
-- **Lead DM:** the board, stale handoffs and recovery proposals. It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
+- **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions the PM has not acknowledged with `crew ticket ack`.
+- **Lead DM:** unanswered Dev questions, the board, stale handoffs and recovery proposals. It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
 
 Open issues without a stage label, such as issues you create on GitHub, are labelled `1:intake` the first time `crew status` sees them.
 
@@ -193,6 +211,7 @@ top_attempts = 2   # retries at max_tier before the ticket comes to you
 - Ranks run from 1 upwards with no gaps. You may define as many as you like; `crew doctor` checks the list.
 - `name` is optional. It helps the DM and you tell ranks apart.
 - Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one rank automatically.
+- A Dev that needs a decision runs `crew ticket ask`. That is not a failed attempt. The DM answers with an `answer` comment, or takes a requirements question to the PM or to you, and then starts a Dev at the same rank.
 - When a ticket fails at `max_tier`, the DM decides what to do: rethink the approach and retry, split the ticket, or ask you.
 - Retries at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew` counts them from the ticket's label history. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` comment summarising what was tried, so the ticket comes to you.
 - Splitting does not use the retry budget, because it changes the plan. The new tickets start at `2:drafting`, so the PM writes their acceptance criteria, and their first attempt uses rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
@@ -280,7 +299,13 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 
 There is no CI gate. `crew` runs the gate locally, and the result does not depend on any agent's word.
 
-- When a Dev submits its work with `crew ticket submit`, `crew` checks out the exact pushed commit into a clean temporary worktree and runs the profile's `build` and `test` through compose.
+- When a Dev submits its work with `crew ticket submit`, `crew` checks out the exact pushed commit into a clean temporary worktree and runs, through compose:
+  1. `build`
+  2. `lint`: formatting, static analysis and architecture rules
+  3. `test`: the full suite
+  4. the ticket's compose stack, waiting until `health` succeeds
+  5. `e2e` against that running stack
+- A profile leaves out the steps that do not apply to its stack.
 - On success the ticket moves to `4:waiting-review`. On failure it stays at `4:in-progress` and the Dev gets the failing output.
 - `crew` posts the result as a commit status (`crew/gate`) on that commit, so it shows on the PR. Commit statuses work on every GitHub plan and need no Actions.
 - At `6:pending-merge`, if `main` has moved, `crew` rebases the branch and runs the gate again on the new commit before merging. Two PRs that pass separately cannot break `main` together.
@@ -321,7 +346,7 @@ Devs and Reviewers run inside the lead DM's harness session and stop when it end
 
 | Found at | Recovery |
 | --- | --- |
-| `4:in-progress` | Start a new Dev at the same rank. An interrupted session is not a failed attempt. The Dev continues from the branch, the ticket comments and the existing worktree, so uncommitted edits survive. |
+| `4:in-progress` | If a Dev question is unanswered, answer it first. Then start a new Dev at the same rank. An interrupted session is not a failed attempt. The Dev continues from the branch, the ticket comments and the existing worktree, so uncommitted edits survive. |
 | `4:waiting-review` | Start a Reviewer. |
 | `4:review-rejected` | Start a Dev one rank up, as normal escalation. |
 | `5:review-approved` | Queue the merge. |
@@ -334,12 +359,13 @@ Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed
 
 The core of Skeleton Crew knows nothing about languages or frameworks. A **profile** describes a stack:
 
-- commands: `setup`, `test`, `test-changed` (only the tests affected by a change, for fast TDD cycles), `build`, `run`, `health`
+- commands: `setup`, `build`, `lint`, `test`, `test-changed` (only the tests affected by a change, for fast TDD cycles), `run`, `health`, `e2e`
 - globs that identify test files
 - a `Containerfile` and a `compose.yaml` for the app and its services
 - an optional deployment workflow (GitHub Actions)
 - default conventions and architecture decisions
 - a starter scaffold
+- database migration rules where the stack has a database: naming, forward-only changes, and renumbering on rebase if the naming needs it. Applied migrations are never edited; fixes go forward. Every gate run starts from a fresh database.
 
 Built-in profiles: **python**, **node-ts**, **java-spring**. At bootstrap you can choose one of them or describe your own stack, and the DM writes a custom profile for it.
 
@@ -365,6 +391,8 @@ Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project:
 AGENTS.md                 the seed file
 .crew/
   crew.toml               configuration
+  logs/                   full gate and test output; not committed, pruned automatically
+  worktrees/              one worktree per ticket in flight; not committed
   docs/
     product.md            PM: what the product is, its users, glossary, your standing preferences
     architecture.md       DM: modules, boundaries, data model
@@ -408,9 +436,10 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 | Command | Stage change |
 | --- | --- |
-| `crew ticket new` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake` |
+| `crew ticket new [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
 | `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change |
+| `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM |
 | `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without numbered acceptance criteria |
 
 ### Lead DM
@@ -438,6 +467,7 @@ Run inside the ticket's worktree.
 | `crew env up`, `crew env down`, `crew env logs` | Manages the ticket's compose project |
 | `crew run <command>` | Runs a profile command, such as `test` or `build`, in its container |
 | `crew ticket submit` | Runs the gate on the exact pushed commit; `4:in-progress` to `4:waiting-review` on success |
+| `crew ticket ask "<question>"` | Posts a `question` for the DM and ends the Dev's run; no stage change, and not a failed attempt |
 | `crew ticket stuck "<reason>"` | `4:in-progress` to `4:review-rejected`; counts as a failed attempt |
 
 ### Reviewer
