@@ -23,8 +23,8 @@ The PM owns *what and why*. The DM owns *how*. The DM never waits for you or the
 2. The PM refines it with you until it has clear acceptance criteria, then marks it eligible.
 3. The DM picks the next eligible ticket, chooses a model tier and starts a Dev.
 4. The Dev works in its own git worktree and container environment, commits, and opens a PR.
-5. CI runs on the PR. A Reviewer checks it against the ticket.
-6. The DM merges approved PRs one at a time. If continuous deployment is configured, CI deploys `main`.
+5. `crew` runs the gate on the exact pushed commit. A Reviewer checks the PR against the ticket.
+6. The DM merges approved PRs one at a time. If continuous deployment is configured, a GitHub Actions workflow deploys `main`.
 
 ## Getting started
 
@@ -74,12 +74,12 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 | `2:drafting` | PM | The PM is refining it, alone or with you |
 | `3:eligible` | DM | Ready to be worked on |
 | `4:in-progress` | Dev | A Dev is implementing it |
-| `4:waiting-review` | Reviewer | The PR is ready and CI has passed; waiting for the Reviewer |
+| `4:waiting-review` | Reviewer | The PR is ready and the gate has passed; waiting for the Reviewer |
 | `4:review-rejected` | DM | The Reviewer rejected it; the DM starts a new attempt |
 | `5:review-approved` | DM | Approved; the build-and-review loop is over |
 | `6:pending-merge` | DM | Queued for merge into `main` |
-| `7:merged` | CI | Merged; deployment starts if configured |
-| `8:deploying` | CI | The deployment workflow is running |
+| `7:merged` | Deploy workflow | Merged; deployment starts if configured |
+| `8:deploying` | Deploy workflow | The deployment workflow is running |
 | `9:done` | — | Finished and closed |
 | `0:cancelled` | — | Will not be done; closed as not planned |
 
@@ -158,8 +158,27 @@ max_tier = "heavy"      # escalation stops here
 
 - Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning.
 - The Reviewer posts its verdict as a PR review. The verdict is advisory; the DM decides whether to merge.
-- CI is the gate. Branch protection on `main` requires a pull request, passing checks and linear history.
-- The DM merges with a rebase. There are no merge commits.
+- The gate decides whether code can merge. See [Gates](#gates).
+- The DM merges by pushing the gated commit to `main` as a fast-forward. GitHub then marks the PR as merged. There are no merge commits, and GitHub's own rebase merge is not used because it rewrites commits, so `main` would hold commits the gate never tested.
+
+## Gates
+
+There is no CI gate. `crew` runs the gate locally, and the result does not depend on any agent's word.
+
+- When a Dev submits its work with `crew ticket submit`, `crew` checks out the exact pushed commit into a clean temporary worktree and runs the profile's `build` and `test` through compose.
+- On success the ticket moves to `4:waiting-review`. On failure it stays at `4:in-progress` and the Dev gets the failing output.
+- `crew` posts the result as a commit status (`crew/gate`) on that commit, so it shows on the PR. Commit statuses work on every GitHub plan and need no Actions.
+- At `6:pending-merge`, if `main` has moved, `crew` rebases the branch and runs the gate again on the new commit before merging. Two PRs that pass separately cannot break `main` together.
+- Gate runs use the local machine, so the parallel cap also limits gate load.
+- Users may add their own CI. `crew` does not depend on it.
+
+## Staying in sync with GitHub
+
+The local repository always matches GitHub.
+
+- Every `crew` command that reads `main` or a branch fetches from GitHub first.
+- Local `main` is never committed to. It only fast-forwards to `origin/main`. If it has diverged, `crew` refuses and reports why.
+- Every commit `crew` makes on a ticket branch is pushed immediately, so a lost session loses no work.
 
 ## Profiles and containers
 
@@ -167,7 +186,7 @@ The core of Skeleton Crew knows nothing about languages or frameworks. A **profi
 
 - commands: `setup`, `test`, `build`, `run`, `health`
 - a `Containerfile` and a `compose.yaml` for the app and its services
-- a CI workflow, and an optional deployment workflow
+- an optional deployment workflow (GitHub Actions)
 - default conventions and architecture decisions
 - a starter scaffold
 
@@ -177,7 +196,7 @@ The application always runs in containers, never directly on the host. Agents ru
 
 ## Deployment
 
-Skeleton Crew never deploys anything itself. A profile may include a deployment workflow that CI runs on every push to `main`. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`. Without a deployment workflow, merging finishes the ticket.
+Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`. Without a deployment workflow, merging finishes the ticket.
 
 ## Prompts and project knowledge
 
@@ -197,8 +216,7 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 ## Not yet designed
 
-- The bootstrap conversation in detail: `crew init`, labels, branch protection and CI setup.
-- Gates: what runs locally before review and what runs in CI.
+- The bootstrap conversation in detail: `crew init`, labels and repository setup.
 - The full `crew` command list and its output contract.
 - Session recovery: what the DM does at startup when tickets are mid-flight.
 - Where project knowledge lives and how briefings select from it.
