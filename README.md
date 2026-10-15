@@ -38,7 +38,8 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
    - **Build from source:** clones the pinned tag and builds it inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so a local build matches the release checksum byte for byte.
    - If you already have Go: `go install` at the pinned tag.
 3. Asks you which profile the project uses, then runs `crew init` with your answers. `crew init` takes flags only; the agent has the conversation with you.
-4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
+4. Offers to set up [harness wiring](#keeping-the-lead-dm-running) and shows it to you before installing it.
+5. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
 
@@ -63,7 +64,7 @@ The DM then opens an **onboarding ticket**, which goes through the normal flow. 
 - An agent harness that reads `AGENTS.md`, runs shell commands, and lets an agent start subagents without your intervention.
 - Linux or macOS. On Windows, use WSL.
 
-No harness plugins, hooks or MCP servers are required.
+No harness plugins, hooks or MCP servers are required. Harness wiring, which the agent writes for its own harness, is optional; it lets the lead DM work without prompting.
 
 ## Tickets
 
@@ -340,6 +341,26 @@ No internal mechanism may stop the crew from making progress. For the lead this 
 - A missing or unreadable lock file counts as "no lead", with a warning, so the next claim succeeds.
 - `crew` never decides on its own that a session is dead. Nothing moves without an open session, and an open session means you are there to confirm.
 
+## Keeping the lead DM running
+
+An agent session only acts when it has a turn. Without help, the lead DM stops when it runs out of work and waits for a prompt, even after new work becomes eligible. Keeping it in a long polling loop is not acceptable either, because every idle check would grow its context.
+
+Each harness has its own features for this, so `crew` ships no harness adapters. Instead, `crew` defines what the wiring must achieve, and the agent that bootstraps the project, PM or DM, writes the wiring with its own harness's features. It shows you the wiring and installs it only when you confirm.
+
+The wiring must:
+
+1. **Be event-driven.** The lead DM wakes only when something happened: a Dev or Reviewer finished, a ticket became eligible, a question was answered, or a handoff went stale. Context then grows with work done, not with time. Compaction is safe because all state is on GitHub.
+2. **Prefer fresh context.** If the harness can start a fresh, short session per event, each wake reads `crew status`, does one round of work and ends.
+3. **Live inside the harness.** No cron jobs, system services or other processes outside the harness session.
+4. **Leave you in control.** It stops when the session closes or when you say so, and never blocks you from talking to a DM.
+5. **Be verifiable.** `crew doctor` checks that the wiring exists and that a test event wakes the lead DM.
+
+`crew events` reports what changed since the previous call. It is the single signal the wiring triggers on.
+
+Without wiring, everything still works: the lead DM acts when you prompt it.
+
+The recommended setup is one lead DM session that does the work, and a conversational DM session that you talk to.
+
 ## Session recovery
 
 Devs and Reviewers run inside the lead DM's harness session and stop when it ends. Every commit is pushed immediately and every stage is a label, so GitHub always holds the full state. When a lead DM starts, `crew status` proposes one action per ticket:
@@ -385,7 +406,7 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 ### Layout
 
-Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project:
+Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project. The one exception is [harness wiring](#keeping-the-lead-dm-running), which lives where the harness requires it, such as `.claude/` or `.opencode/`, and is recorded in `.crew/crew.toml`.
 
 ```
 AGENTS.md                 the seed file
@@ -428,7 +449,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | Command | Does |
 | --- | --- |
 | `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
-| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks and knowledge size; runs one gate |
+| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks, knowledge size and harness wiring; runs one gate |
 | `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
 | `crew brief <role> [<ticket>]` | Prints an agent's briefing, with the model and effort to use |
 
@@ -448,6 +469,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew dm claim [--takeover]` | Takes the lead |
 | `crew dm release` | Gives up the lead |
+| `crew events` | Reports what changed since the previous call; the signal for harness wiring |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
