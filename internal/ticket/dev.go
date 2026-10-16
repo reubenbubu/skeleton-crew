@@ -90,11 +90,17 @@ func InFlight(c *github.Client) ([]int, error) {
 // its tier. The tier goes on first, so a failure leaves the ticket at 3:eligible,
 // where start can run again.
 func Start(c *github.Client, number, rank int) error {
+	return attempt(c, number, "3:eligible", rank)
+}
+
+// attempt starts an attempt at rank on ticket number: it moves the ticket
+// from stage from to 4:in-progress and makes rank its only tier.
+func attempt(c *github.Client, number int, from string, rank int) error {
 	tier := fmt.Sprintf("tier:%d", rank)
 	if _, err := c.AddLabels(number, tier); err != nil {
 		return err
 	}
-	i, err := move(c, number, "3:eligible", "4:in-progress", nil)
+	i, err := move(c, number, from, "4:in-progress", nil)
 	if err != nil {
 		return err
 	}

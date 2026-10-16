@@ -45,7 +45,7 @@ These rules are built into `crew`. You cannot change them. If project knowledge 
 - `crew ticket list`: one line per open ticket.
 - `crew ticket show <n>`: the ticket, its timeline and its comments. `crew ticket show <n> --all` also shows `log` comments in full.
 - `crew ticket comment <n> --kind <kind> --as <role> "<text>"`: posts a comment. Kinds are `decision`, `question`, `answer`, `review` and `log`; roles are `pm`, `dm`, `dev` and `reviewer`. Always use your own role. Post comments only this way, or through a command that posts its own.
-- `crew ticket block <n> "<reason>"` and `crew ticket unblock <n>`: set or clear the `blocked` flag.
+- `crew ticket block <n> --as <role> "<reason>"`: sets the `blocked` flag and posts the reason as a `question` for the user; the role is `pm` or `dm`. Devs ask the DM with `crew ticket ask` instead. `crew ticket unblock <n>` clears the flag once the user has answered.
 
 Routine progress is recorded by the stage labels, not by comments. Comment only to record a decision, a question, an answer, a review or a log entry that someone will need. `crew ticket show` collapses a `log` comment into the timeline as its first line, so make that line say what happened.
 

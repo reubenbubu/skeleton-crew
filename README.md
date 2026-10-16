@@ -103,7 +103,19 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 
 ### Parent tickets
 
-The PM splits a large requirement into a parent ticket and smaller child tickets with `crew ticket new --parent <n>`. Parents use GitHub's own sub-issues. A parent has no stage, is never worked on directly, and is closed by `crew status` once all its children are done or cancelled.
+The PM splits a large requirement into a parent ticket and smaller child tickets with `crew ticket new --parent <n>`. Parents use GitHub's own sub-issues. A parent has no stage, is never worked on directly, and is closed by `crew status` once all its children are done or cancelled. `crew ticket new --parent <n>` makes the new ticket a sub-issue of `n` and takes `n`'s stage label off. It refuses a parent that is closed or past `2:drafting`.
+
+### Editing a ticket
+
+```
+crew ticket edit <n> [--body-file <file>] [--priority <p>] [--kind <k>] [--testing <level>] [--add-dependency <m>] [--remove-dependency <m>]
+```
+
+- `--body-file` replaces the body with the file's contents; `--body-file /dev/stdin` reads it from standard input.
+- `--testing` takes `minimal`, `standard` or `thorough`, or `project`, which removes the ticket's override.
+- `--add-dependency` and `--remove-dependency` may be repeated. Each names a ticket that `n` is blocked by.
+- It checks every change before it makes any, and refuses a dependency that does not exist, is already there when added, or is not there when removed.
+- It prints the ticket's fields, then one line `revised <criterion>` for each criterion it marked as revised; see [Obsolete tests are maintained](#obsolete-tests-are-maintained).
 
 ### Ticket lifecycle
 
@@ -275,7 +287,7 @@ reviewer = 2   # rank the Reviewer always uses
 max_tier = 3   # escalation stops here; defaults to the highest rank
 
 [escalation]
-top_attempts = 2   # retries at max_tier before the ticket comes to you
+top_attempts = 2   # attempts at max_tier before the ticket comes to you
 ```
 
 - Ranks run from 1 upwards with no gaps. You may define as many as you like; `crew doctor` checks the list.
@@ -283,8 +295,8 @@ top_attempts = 2   # retries at max_tier before the ticket comes to you
 - Each failed attempt, such as a review rejection or a Dev reporting it is stuck, moves the next attempt up one rank automatically.
 - A Dev that needs a decision runs `crew ticket ask`. That is not a failed attempt. The DM answers with an `answer` comment, or takes a requirements question to the PM or to you, and then starts a Dev at the same rank.
 - When a ticket fails at `max_tier`, the DM decides what to do: rethink the approach and retry, split the ticket, or ask you.
-- Retries at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew` counts them from the ticket's label history. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` comment summarising what was tried, so the ticket comes to you.
-- Splitting does not use the retry budget, because it changes the plan. The new tickets start at `2:drafting`, so the PM writes their acceptance criteria, and their first attempt uses rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
+- Attempts at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew ticket retry` counts them from the ticket's label history: each time the ticket reached `4:in-progress` at the `max_tier` rank since `blocked` was last cleared. When a retry would start one attempt more, `crew` refuses it, sets `blocked` and posts a `question` comment as `dm` that lists the attempts and their failure reasons, so the ticket comes to you. Once you have answered, clearing `blocked` gives the ticket a new budget at `max_tier`. A blocked ticket is never retried.
+- Splitting does not use the retry budget, because it changes the plan. The new tickets start at `2:drafting` with the split ticket's priority and kind, so the PM writes their acceptance criteria, and their first attempt uses rank 1. Each gets a `log` comment `split from #<n>`, and the split ticket one naming them. If the split ticket is a sub-issue, the new tickets become sub-issues of the same parent. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
 - You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
 - `crew init` fills in default models for your harness. It detects the harness from the environment (`AI_AGENT`, `CLAUDECODE`, `OPENCODE`), and `--harness <name>` overrides the detection. For Claude Code the ranks get the model aliases `haiku`, `sonnet` and `opus`, which follow new model releases. For any other harness, `model` is left empty, which means the session's model. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
@@ -346,7 +358,7 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 
 - Tests name their criteria, so `crew` finds tests whose criterion was removed, revised or belongs to a cancelled ticket. The gate flags them, and the ticket that changed the requirement updates or deletes them in the same PR.
   - The gate reads every test file at the gated commit and each ticket a criterion ID in it points to. A criterion is **removed** when its ticket's acceptance criteria no longer list it, or the ticket does not exist, and **cancelled** when its ticket is at `0:cancelled` or closed as not planned.
-  - When `crew ticket edit` changes the text of an existing criterion, it marks the line with the time, such as `- [#12-AC1] (revised 2026-10-16T09:12Z) <text>`. A test file that names the criterion is **revised** when its last commit is older than that mark.
+  - When `crew ticket edit` changes the text of an existing criterion, it marks the line with the time, such as `- [#12-AC1] (revised 2026-10-16T09:12Z) <text>`. A test file that names the criterion is **revised** when its last commit is older than that mark. `crew` keeps the marks itself: a criterion whose text is unchanged keeps its earlier mark, and a new criterion has none.
   - A flag is one line in the gate's output, such as `flag: tests/test_login.py names #12-AC1: removed`. Flags do not fail the gate.
 - The gate refuses skipped or disabled tests. A profile lists the markers that skip or disable a test in its stack, such as `@pytest.mark.skip`, and the gate refuses any line that the branch adds to a test file and that contains one of them. Tests skipped before the branch left `main` do not block it.
 - A commit that changes or deletes an existing test must give the reason, such as the criterion revision. The Reviewer rejects any test weakened just to make it pass.
@@ -643,7 +655,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew ticket new "<title>" [--priority <p>] [--kind <k>] [--intake] [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
-| `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change. Marks a criterion whose text it changes as `(revised <time>)` |
+| `crew ticket edit <n> [<flags>]` | Changes body, priority, kind, testing level or dependencies; no stage change. Marks a criterion whose text it changes as `(revised <time>)`; see [Editing a ticket](#editing-a-ticket) |
 | `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM, with a `log` comment `ack` |
 | `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without numbered acceptance criteria |
 
@@ -658,11 +670,11 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew events [--wait [--test]]` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress` and sets `tier:<rank>`; creates the branch and worktree, and names the compose project `crew-<n>`; refused at the parallel cap |
-| `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
-| `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
-| `crew ticket split <n>` | Creates child tickets at `2:drafting`, for the PM to complete, and cancels the parent |
+| `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer, and posts the reason as a `review` comment by `dm`; one appeal per attempt, refused when the attempt ended with `crew ticket stuck` |
+| `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up to at most `max_tier`; enforces `top_attempts` |
+| `crew ticket split <n> "<title>" "<title>"...` | Creates one child ticket per title, at least two, at `2:drafting`, for the PM to complete, and cancels the parent |
 | `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`, and to `9:done` without a deployment workflow; rebases and gates again if `main` moved, then fast-forwards `main`. Also accepts a ticket at `6:pending-merge` |
-| `crew ticket cancel <n>` | Any open stage to `0:cancelled` |
+| `crew ticket cancel <n>` | Any open stage to `0:cancelled`, and closes the issue as not planned |
 
 ### Dev
 
@@ -693,7 +705,8 @@ Run inside the ticket's worktree.
 | `crew ticket list` | One line per ticket |
 | `crew ticket show <n> [--all]` | The terse ticket view |
 | `crew ticket comment <n> --kind <kind> --as <role> "<text>"` | Posts a tagged comment |
-| `crew ticket block <n> "<reason>"`, `crew ticket unblock <n>` | Sets or clears the `blocked` flag |
+| `crew ticket block <n> --as <role> "<reason>"` | Sets the `blocked` flag and posts the reason as a `question` comment by the role, `pm` or `dm`, so `crew status` shows it to you |
+| `crew ticket unblock <n>` | Clears the `blocked` flag |
 
 ## Later
 

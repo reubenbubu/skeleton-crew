@@ -125,30 +125,32 @@ func New(repo string, c clock.Clock) *GitHub {
 	}
 	p := "/repos/" + repo + "/"
 	routes := map[string]http.HandlerFunc{
-		"GET " + p + "issues":                              g.listIssues,
-		"POST " + p + "issues":                             g.createIssue,
-		"GET " + p + "issues/{n}":                          g.getIssue,
-		"PATCH " + p + "issues/{n}":                        g.editIssue,
-		"GET " + p + "labels":                              g.listLabels,
-		"POST " + p + "labels":                             g.createLabel,
-		"POST " + p + "issues/{n}/labels":                  g.addLabels,
-		"DELETE " + p + "issues/{n}/labels/{name}":         g.removeLabel,
-		"GET " + p + "issues/comments":                     g.listRepoComments,
-		"GET " + p + "issues/{n}/comments":                 g.listComments,
-		"POST " + p + "issues/{n}/comments":                g.createComment,
-		"GET " + p + "issues/{n}/events":                   g.listEvents,
-		"GET " + p + "issues/{n}/sub_issues":               g.listSubIssues,
-		"POST " + p + "issues/{n}/sub_issues":              g.addSubIssue,
-		"GET " + p + "issues/{n}/dependencies/blocked_by":  g.listBlockedBy,
-		"POST " + p + "issues/{n}/dependencies/blocked_by": g.addBlockedBy,
-		"GET " + p + "pulls":                               g.listPulls,
-		"POST " + p + "pulls":                              g.createPull,
-		"GET " + p + "pulls/{n}":                           g.getPull,
-		"GET " + p + "pulls/{n}/reviews":                   g.listReviews,
-		"POST " + p + "pulls/{n}/reviews":                  g.createReview,
-		"POST " + p + "statuses/{sha}":                     g.createStatus,
-		"GET " + p + "commits/{sha}/status":                g.combinedStatus,
-		"GET " + p + "actions/runs":                        g.listRuns,
+		"GET " + p + "issues":                                     g.listIssues,
+		"POST " + p + "issues":                                    g.createIssue,
+		"GET " + p + "issues/{n}":                                 g.getIssue,
+		"PATCH " + p + "issues/{n}":                               g.editIssue,
+		"GET " + p + "labels":                                     g.listLabels,
+		"POST " + p + "labels":                                    g.createLabel,
+		"POST " + p + "issues/{n}/labels":                         g.addLabels,
+		"DELETE " + p + "issues/{n}/labels/{name}":                g.removeLabel,
+		"GET " + p + "issues/comments":                            g.listRepoComments,
+		"GET " + p + "issues/{n}/comments":                        g.listComments,
+		"POST " + p + "issues/{n}/comments":                       g.createComment,
+		"GET " + p + "issues/{n}/events":                          g.listEvents,
+		"GET " + p + "issues/{n}/sub_issues":                      g.listSubIssues,
+		"POST " + p + "issues/{n}/sub_issues":                     g.addSubIssue,
+		"GET " + p + "issues/{n}/parent":                          g.getParent,
+		"GET " + p + "issues/{n}/dependencies/blocked_by":         g.listBlockedBy,
+		"POST " + p + "issues/{n}/dependencies/blocked_by":        g.addBlockedBy,
+		"DELETE " + p + "issues/{n}/dependencies/blocked_by/{id}": g.removeBlockedBy,
+		"GET " + p + "pulls":                                      g.listPulls,
+		"POST " + p + "pulls":                                     g.createPull,
+		"GET " + p + "pulls/{n}":                                  g.getPull,
+		"GET " + p + "pulls/{n}/reviews":                          g.listReviews,
+		"POST " + p + "pulls/{n}/reviews":                         g.createReview,
+		"POST " + p + "statuses/{sha}":                            g.createStatus,
+		"GET " + p + "commits/{sha}/status":                       g.combinedStatus,
+		"GET " + p + "actions/runs":                               g.listRuns,
 	}
 	routes["GET /user"] = g.getUser
 	routes["POST /user/repos"] = g.createRepo
@@ -778,6 +780,21 @@ func (g *GitHub) addSubIssue(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (g *GitHub) getParent(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	i := g.pathIssue(w, r)
+	if i == nil {
+		return
+	}
+	p := g.issue(g.parent[i.number])
+	if p == nil {
+		fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	reply(w, http.StatusOK, g.issueJSON(p))
+}
+
 func (g *GitHub) listBlockedBy(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -815,6 +832,23 @@ func (g *GitHub) addBlockedBy(w http.ResponseWriter, r *http.Request) {
 		g.blockedBy[i.number] = append(g.blockedBy[i.number], b.number)
 		reply(w, http.StatusCreated, g.issueJSON(b))
 	}
+}
+
+func (g *GitHub) removeBlockedBy(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	i := g.pathIssue(w, r)
+	if i == nil {
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	b := g.issueByID(id)
+	if b == nil || !slices.Contains(g.blockedBy[i.number], b.number) {
+		fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	g.blockedBy[i.number] = slices.DeleteFunc(g.blockedBy[i.number], func(n int) bool { return n == b.number })
+	reply(w, http.StatusOK, g.issueJSON(b))
 }
 
 func (g *GitHub) listPulls(w http.ResponseWriter, r *http.Request) {

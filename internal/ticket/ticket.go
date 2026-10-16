@@ -106,8 +106,43 @@ func get(c *github.Client, number int) (github.Issue, Fields, error) {
 }
 
 // Create creates a ticket with the skeleton body at 2:drafting, or at
-// 1:intake when intake is true.
-func Create(c *github.Client, title, priority, kind string, intake bool) (int, Fields, error) {
+// 1:intake when intake is true. A parent other than 0 makes it a sub-issue
+// of that ticket, which then keeps no stage. The parent must be open and at
+// 1:intake, 2:drafting or no stage.
+func Create(c *github.Client, title, priority, kind string, intake bool, parent int) (int, Fields, error) {
+	var pf Fields
+	if parent != 0 {
+		p, f, err := get(c, parent)
+		if err != nil {
+			return 0, Fields{}, err
+		}
+		if p.State == "closed" {
+			return 0, Fields{}, fmt.Errorf("#%d is closed", parent)
+		}
+		if f.Stage != "" && !pmStage(f.Stage) {
+			return 0, Fields{}, fmt.Errorf("#%d is at %s; a parent must be at 1:intake or 2:drafting", parent, f.Stage)
+		}
+		pf = f
+	}
+	i, f, err := create(c, title, priority, kind, intake)
+	if err != nil || parent == 0 {
+		return i.Number, f, err
+	}
+	if err := c.AddSubIssue(parent, i.ID); err != nil {
+		return i.Number, f, err
+	}
+	for s := range strings.SplitSeq(pf.Stage, ",") {
+		if s == "" {
+			continue
+		}
+		if _, err := c.TakeLabel(parent, "stage:"+s); err != nil {
+			return i.Number, f, err
+		}
+	}
+	return i.Number, f, nil
+}
+
+func create(c *github.Client, title, priority, kind string, intake bool) (github.Issue, Fields, error) {
 	f := Fields{Stage: "2:drafting", Priority: priority, Kind: kind}
 	if intake {
 		f.Stage = "1:intake"
@@ -117,7 +152,7 @@ func Create(c *github.Client, title, priority, kind string, intake bool) (int, F
 		Body:   Skeleton,
 		Labels: []string{"stage:" + f.Stage, "priority:" + priority, "kind:" + kind},
 	})
-	return i.Number, f, err
+	return i, f, err
 }
 
 // Triage moves ticket number from 1:intake to 2:drafting.
@@ -139,7 +174,7 @@ func Ready(c *github.Client, number int) error {
 // accepts the issue, and only if the ticket is still at from. Each caller
 // allows only a forward move.
 func move(c *github.Client, number int, from, to string, check func(github.Issue) error) (github.Issue, error) {
-	if stageRank(to) < stageRank(from) {
+	if to != Cancelled && stageRank(to) < stageRank(from) {
 		panic("backward stage move: " + from + " to " + to)
 	}
 	i, f, err := get(c, number)

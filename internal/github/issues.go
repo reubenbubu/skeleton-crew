@@ -165,6 +165,14 @@ func (c *Client) AddSubIssue(parent int, childID int64) error {
 	return err
 }
 
+// Parent returns the issue that issue number is a sub-issue of, and false
+// when it has none.
+func (c *Client) Parent(number int) (Issue, bool, error) {
+	var i Issue
+	status, err := c.do(http.MethodGet, c.path("issues/%d/parent", number), nil, &i, http.StatusOK, http.StatusNotFound)
+	return i, err == nil && status == http.StatusOK, err
+}
+
 // BlockedBy lists the issues that issue number is blocked by.
 func (c *Client) BlockedBy(number int) ([]Issue, error) {
 	return list[Issue](c, c.path("issues/%d/dependencies/blocked_by", number))
@@ -177,6 +185,13 @@ func (c *Client) AddBlockedBy(number int, blockerID int64) error {
 		IssueID int64 `json:"issue_id"`
 	}{blockerID}
 	_, err := c.do(http.MethodPost, c.path("issues/%d/dependencies/blocked_by", number), b, nil, http.StatusCreated)
+	return err
+}
+
+// RemoveBlockedBy removes the record that issue number is blocked by the
+// issue with API ID blockerID.
+func (c *Client) RemoveBlockedBy(number int, blockerID int64) error {
+	_, err := c.do(http.MethodDelete, c.path("issues/%d/dependencies/blocked_by/%d", number, blockerID), nil, nil, http.StatusOK)
 	return err
 }
 

@@ -67,12 +67,12 @@ Without wiring, you act only when the user prompts you. With it, you wake when s
 
 A review rejection, or a Dev that runs `crew ticket stuck`, is a failed attempt. The ticket is at `4:review-rejected`.
 
-- Run `crew ticket retry <n> --lead <token>` to start the next attempt one rank up, then brief and start a Dev as above.
-- If you believe a rejection is wrong, run `crew ticket appeal <n> "<reason>" --lead <token>`. It moves the ticket back to `4:waiting-review` for a second Reviewer, who starts fresh and sees the first rejection and your reason. If it approves, the ticket goes on to merge; if it rejects, the rejection stands. You cannot overrule a Reviewer alone. An appeal is not a failed attempt and does not change the rank. Each attempt allows one appeal.
+- Run `crew ticket retry <n> --lead <token>` to start the next attempt one rank up, to at most `max_tier`, then brief and start a Dev as above. A blocked ticket is never retried.
+- If you believe a rejection is wrong, run `crew ticket appeal <n> "<reason>" --lead <token>`. It moves the ticket back to `4:waiting-review` for a second Reviewer, who starts fresh and sees the first rejection and your reason. Your reason is posted as a `review` comment. If it approves, the ticket goes on to merge; if it rejects, the rejection stands. You cannot overrule a Reviewer alone. An appeal is not a failed attempt and does not change the rank. Each attempt allows one appeal, and an attempt that ended with `crew ticket stuck` has no rejection to appeal.
 - Escalation stops at `max_tier`. When a ticket fails at `max_tier`, decide: rethink the approach and retry, split the ticket, or ask the user.
-- Retries at `max_tier` are limited by `[escalation] top_attempts`. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` summarising what was tried, so the ticket comes to the user.
-- `crew ticket split <n> --lead <token>` creates child tickets at `2:drafting` for the PM to complete, and cancels the parent. Splitting does not use the retry budget, because it changes the plan. The new tickets start at rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to the user.
-- `crew ticket cancel <n> --lead <token>` moves a ticket from any open stage to `0:cancelled`.
+- Attempts at `max_tier` are limited by `[escalation] top_attempts`. Past the limit, `crew ticket retry` refuses to start another Dev, sets `blocked` and posts a `question` summarising what was tried, so the ticket comes to the user. Once the user has answered, `crew ticket unblock <n>` gives the ticket a new budget at `max_tier`.
+- `crew ticket split <n> "<title>" "<title>"... --lead <token>` creates one child ticket per title, at least two, at `2:drafting` for the PM to complete, and cancels the parent. Splitting does not use the retry budget, because it changes the plan. The new tickets start at rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to the user.
+- `crew ticket cancel <n> --lead <token>` moves a ticket from any open stage to `0:cancelled` and closes it as not planned.
 
 ## Merging
 
@@ -111,7 +111,7 @@ When `crew` stops and reports something outside the normal path, handle it with 
 
 ## Testing level
 
-The project's testing level is in `.crew/crew.toml`. Set a ticket's `testing:` label with `crew ticket edit` when the user asks, and raise it for clearly risky work.
+The project's testing level is in `.crew/crew.toml`. Set a ticket's `testing:` label with `crew ticket edit <n> --testing <level>` when the user asks, and raise it for clearly risky work.
 
 ## Project knowledge
 
@@ -126,4 +126,4 @@ The project's testing level is in `.crew/crew.toml`. Set a ticket's `testing:` l
 ## Tickets
 
 - Create tickets from the user's requests with `crew ticket new`; the PM writes their acceptance criteria.
-- Set dependencies between tickets with `crew ticket edit`.
+- Set dependencies between tickets with `crew ticket edit <n> --add-dependency <m>`, and drop one with `--remove-dependency <m>`.

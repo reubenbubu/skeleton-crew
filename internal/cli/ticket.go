@@ -26,6 +26,14 @@ var ticketCommands = map[string]func([]string, Env) int{
 	"stuck":   runTicketStuck,
 	"submit":  runTicketSubmit,
 	"next":    runTicketNext,
+	"retry":   runTicketRetry,
+	"appeal":  runTicketAppeal,
+	"split":   runTicketSplit,
+	"cancel":  runTicketCancel,
+	"edit":    runTicketEdit,
+	"ack":     runTicketAck,
+	"block":   runTicketBlock,
+	"unblock": runTicketUnblock,
 }
 
 func runTicket(args []string, env Env) int {
@@ -42,7 +50,8 @@ func runTicket(args []string, env Env) int {
 // positional parses args into fs, allowing flags before, between and after
 // the positional arguments, which it returns. names are the positional
 // arguments the command takes, such as <n>; each must be given and not
-// blank, except an optional one such as [<n>], which may be left out.
+// blank, except an optional one such as [<n>], which may be left out. A
+// last name that ends in ..., such as <title>..., takes every argument left.
 func positional(fs *flag.FlagSet, args []string, names ...string) ([]string, error) {
 	var pos []string
 	for {
@@ -58,6 +67,12 @@ func positional(fs *flag.FlagSet, args []string, names ...string) ([]string, err
 			break
 		}
 		pos, args = append(pos, rest[0]), rest[1:]
+	}
+	if last := len(names) - 1; last >= 0 && strings.HasSuffix(names[last], "...") {
+		names[last] = strings.TrimSuffix(names[last], "...")
+		for len(names) < len(pos) {
+			names = append(names, names[last])
+		}
 	}
 	if len(pos) > len(names) {
 		return nil, usageError{"unexpected argument: " + pos[len(names)]}
@@ -122,8 +137,13 @@ func runTicketNew(args []string, env Env) int {
 	priority := fs.String("priority", "medium", "")
 	kind := fs.String("kind", "feat", "")
 	intake := fs.Bool("intake", false, "")
+	parent := fs.String("parent", "", "")
 	asJSON := fs.Bool("json", false, "")
 	pos, err := positional(fs, args, "<title>")
+	var p int
+	if err == nil && *parent != "" {
+		p, err = number(*parent)
+	}
 	if err == nil {
 		err = oneOf("priority", *priority, ticket.Priorities)
 	}
@@ -137,7 +157,7 @@ func runTicketNew(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
-	n, f, err := ticket.Create(c, pos[0], *priority, *kind, *intake)
+	n, f, err := ticket.Create(c, pos[0], *priority, *kind, *intake, p)
 	if err != nil {
 		return finish(env, err, false)
 	}
@@ -147,9 +167,14 @@ func runTicketNew(args []string, env Env) int {
 			Stage    string `json:"stage"`
 			Priority string `json:"priority"`
 			Kind     string `json:"kind"`
-		}{n, f.Stage, f.Priority, f.Kind})
+			Parent   int    `json:"parent,omitempty"`
+		}{n, f.Stage, f.Priority, f.Kind, p})
 	} else {
-		err = lines(env.Stdout, fmt.Sprintf("#%d %s", n, f))
+		l := fmt.Sprintf("#%d %s", n, f)
+		if p != 0 {
+			l += fmt.Sprintf(" parent=#%d", p)
+		}
+		err = lines(env.Stdout, l)
 	}
 	return finish(env, err, false)
 }

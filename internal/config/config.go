@@ -208,7 +208,7 @@ reviewer = 2   # rank the Reviewer always uses
 max_tier = 3   # escalation stops here
 
 [escalation]
-top_attempts = 2   # retries at max_tier before the ticket comes to you
+top_attempts = 2   # attempts at max_tier before the ticket comes to you
 
 [testing]
 level = "standard"   # minimal | standard | thorough
