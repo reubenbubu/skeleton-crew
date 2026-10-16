@@ -27,6 +27,7 @@ type project struct {
 	origin   string
 	fullName string // owner/name on GitHub
 	fake     *fakegithub.GitHub
+	clock    *clock.Fake // the fake GitHub's clock
 	env      map[string]string
 }
 
@@ -45,7 +46,8 @@ func newProject(t *testing.T, repo string) *project {
 	cfg := filepath.Join(root, "gitconfig")
 	os.WriteFile(cfg, []byte(fmt.Sprintf("[user]\n\tname = user\n\temail = user@example.com\n[init]\n\tdefaultBranch = main\n[url %q]\n\tinsteadOf = https://github.com/%s.git\n\tinsteadOf = git@github.com:%s.git\n", p.origin, repo, repo)), 0o644)
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
-	p.fake = fakegithub.New(repo, clock.NewFake(clock.Epoch))
+	p.clock = clock.NewFake(clock.Epoch)
+	p.fake = fakegithub.New(repo, p.clock)
 	p.fake.SetExists(false)
 	return p
 }

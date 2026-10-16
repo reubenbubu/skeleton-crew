@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -38,6 +39,12 @@ func (c *Client) CreateRepo(org, name string, private bool) (Repo, error) {
 	var r Repo
 	_, err := c.do(http.MethodPost, path, body, &r, http.StatusCreated)
 	return r, err
+}
+
+// NotFound reports whether err is GitHub answering 404 Not Found.
+func NotFound(err error) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Status == http.StatusNotFound
 }
 
 // AuthRequired reports whether err means gh is not logged in, or its login
@@ -95,4 +102,16 @@ func local(run Runner, args ...string) (string, error) {
 		return "", &Error{Exit: res.Code, Detail: oneLine("gh " + strings.Join(args, " ") + ": " + line)}
 	}
 	return string(res.Stdout), nil
+}
+
+var githubURL = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
+
+// RepoFromURL returns the owner/name of the github.com repository that a git
+// remote URL points at, and false when the URL is not on github.com.
+func RepoFromURL(url string) (string, bool) {
+	m := githubURL.FindStringSubmatch(url)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }

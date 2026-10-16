@@ -16,6 +16,7 @@ import (
 var commands = map[string]func([]string, Env) int{
 	"init":   runInit,
 	"doctor": runDoctor,
+	"ticket": runTicket,
 }
 
 // usageError is a problem with the command line: exit 2.

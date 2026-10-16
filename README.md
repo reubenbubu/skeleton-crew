@@ -90,12 +90,11 @@ Tickets are GitHub Issues. Each actionable ticket carries these labels:
 
 ### Ticket body
 
-`crew ticket new` writes this skeleton, and `crew ticket ready` checks that the goal and the acceptance criteria are filled in:
+`crew ticket new "<title>"` writes this skeleton, with `priority:medium` and `kind:feat` unless `--priority` and `--kind` say otherwise. The PM fills it in with `crew ticket edit` once the ticket has its number, which the criterion IDs need. `crew ticket ready` checks that the goal has text and that the acceptance criteria hold at least one line of the form `- [#<n>-AC<k>] <text>`, where `<n>` is the ticket's own number:
 
 ```markdown
 ## Goal
 ## Acceptance criteria
-- [#12-AC1] ...
 ## Out of scope
 ## Assumptions
 ## Non-functional
@@ -149,7 +148,9 @@ stage=4:in-progress priority=high kind=feat tier=2 pr=#31
 [human] user 2026-10-15T09:30Z: Redirect to login with a notice.
 ```
 
-Routine progress is recorded as label changes, which GitHub keeps in the issue timeline, not as comments. Agents post comments only through `crew ticket comment --kind <kind>`. The kind is stored as an invisible marker in the comment:
+Routine progress is recorded as label changes, which GitHub keeps in the issue timeline, not as comments. The timeline lists when each stage was reached, when `blocked` was set or cleared, when the issue was closed, and the first line of each `log` comment.
+
+Agents post comments only through `crew ticket comment <n> --kind <kind> --as <role> "<text>"`, where the role is `pm`, `dm`, `dev` or `reviewer`. Commands that post comments themselves, such as `crew ticket ask`, set the kind and role. The comment starts with an invisible marker line, such as `<!-- crew:decision dm -->`, followed by the text. Any comment without a marker is a human comment, shown under its author's GitHub login:
 
 | Kind | Shown by `crew ticket show` |
 | --- | --- |
@@ -157,7 +158,15 @@ Routine progress is recorded as label changes, which GitHub keeps in the issue t
 | `log` | Collapsed into the timeline |
 | Human comments | In full |
 
-`--all` shows the full thread.
+`--all` shows the full thread, with `log` comments in full.
+
+`crew ticket list` prints one line per open ticket, in number order: the label fields, then the title.
+
+```
+$ crew ticket list
+#12 stage=4:in-progress priority=high kind=feat tier=2 blocked · Login with email
+#13 stage=2:drafting priority=medium kind=fix · Expired links crash
+```
 
 ## Status
 
@@ -531,7 +540,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 | Command | Stage change |
 | --- | --- |
-| `crew ticket new [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
+| `crew ticket new "<title>" [--priority <p>] [--kind <k>] [--intake] [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
 | `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change |
 | `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM |
@@ -580,7 +589,7 @@ Run inside the ticket's worktree.
 | `crew status` | Shows what needs the caller's attention; see [Status](#status) |
 | `crew ticket list` | One line per ticket |
 | `crew ticket show <n> [--all]` | The terse ticket view |
-| `crew ticket comment <n> --kind <kind>` | Posts a tagged comment |
+| `crew ticket comment <n> --kind <kind> --as <role> "<text>"` | Posts a tagged comment |
 | `crew ticket block <n> "<reason>"`, `crew ticket unblock <n>` | Sets or clears the `blocked` flag |
 
 ## Later

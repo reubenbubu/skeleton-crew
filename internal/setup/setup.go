@@ -49,8 +49,6 @@ type Result struct {
 // RepoName checks that s has the form owner/name.
 var RepoName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
-var githubURL = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
-
 // Init sets up the project in o.Dir. It checks everything it can before it
 // changes anything, and stops at the first problem.
 func Init(o Options) (Result, error) {
@@ -78,11 +76,11 @@ func Init(o Options) (Result, error) {
 			return res, err
 		}
 		if origin != "" {
-			m := githubURL.FindStringSubmatch(origin)
-			if m == nil {
+			repo, ok := github.RepoFromURL(origin)
+			if !ok {
 				return res, fmt.Errorf("origin is not on github.com: %s", origin)
 			}
-			res.Repo = m[1]
+			res.Repo = repo
 		}
 		changed, err := r.Changed(".gitignore")
 		if err != nil {

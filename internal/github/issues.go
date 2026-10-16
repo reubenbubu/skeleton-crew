@@ -156,3 +156,16 @@ func (c *Client) AddBlockedBy(number int, blockerID int64) error {
 	_, err := c.do(http.MethodPost, c.path("issues/%d/dependencies/blocked_by", number), b, nil, http.StatusCreated)
 	return err
 }
+
+// Event is one entry in an issue's event history, such as a label being
+// added (labeled) or removed (unlabeled), or the issue being closed.
+type Event struct {
+	Event     string    `json:"event"`
+	Label     *Label    `json:"label"` // set for labeled and unlabeled
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Events lists the events of issue number, oldest first.
+func (c *Client) Events(number int) ([]Event, error) {
+	return list[Event](c, c.path("issues/%d/events", number))
+}

@@ -49,6 +49,7 @@ type GitHub struct {
 	issues      []*issue // issues and pull requests share numbers; index is number-1
 	labels      []*label
 	comments    map[int][]*comment
+	events      map[int][]*event
 	parent      map[int]int
 	blockedBy   map[int][]int
 	branches    map[string]string
@@ -80,6 +81,15 @@ type comment struct {
 	created time.Time
 }
 
+// event is a label being added (labeled) or removed (unlabeled), or the
+// issue being closed or reopened.
+type event struct {
+	id      int64
+	event   string
+	label   string // for labeled and unlabeled
+	created time.Time
+}
+
 type review struct {
 	id                    int64
 	state, body, commitID string
@@ -106,6 +116,7 @@ func New(repo string, c clock.Clock) *GitHub {
 		mux:       http.NewServeMux(),
 		nextID:    1000,
 		comments:  map[int][]*comment{},
+		events:    map[int][]*event{},
 		parent:    map[int]int{},
 		blockedBy: map[int][]int{},
 		branches:  map[string]string{},
@@ -124,6 +135,7 @@ func New(repo string, c clock.Clock) *GitHub {
 		"DELETE " + p + "issues/{n}/labels/{name}":         g.removeLabel,
 		"GET " + p + "issues/{n}/comments":                 g.listComments,
 		"POST " + p + "issues/{n}/comments":                g.createComment,
+		"GET " + p + "issues/{n}/events":                   g.listEvents,
 		"GET " + p + "issues/{n}/sub_issues":               g.listSubIssues,
 		"POST " + p + "issues/{n}/sub_issues":              g.addSubIssue,
 		"GET " + p + "issues/{n}/dependencies/blocked_by":  g.listBlockedBy,
@@ -272,7 +284,11 @@ func (g *GitHub) SetIssueLabels(number int, names ...string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if i := g.issue(number); i != nil {
-		i.labels = nil
+		for _, l := range slices.Clone(i.labels) {
+			if !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(l, n) }) {
+				g.removeIssueLabel(i, l)
+			}
+		}
 		g.addIssueLabels(i, names)
 	}
 }
@@ -341,8 +357,24 @@ func (g *GitHub) addIssueLabels(i *issue, names []string) {
 		}
 		if !slices.ContainsFunc(i.labels, func(l string) bool { return strings.EqualFold(l, n) }) {
 			i.labels = append(i.labels, g.label(n).name)
+			g.record(i, "labeled", g.label(n).name)
 		}
 	}
+}
+
+// removeIssueLabel removes label name from i and reports whether i had it.
+func (g *GitHub) removeIssueLabel(i *issue, name string) bool {
+	k := slices.IndexFunc(i.labels, func(l string) bool { return strings.EqualFold(l, name) })
+	if k < 0 {
+		return false
+	}
+	g.record(i, "unlabeled", i.labels[k])
+	i.labels = slices.Delete(i.labels, k, k+1)
+	return true
+}
+
+func (g *GitHub) record(i *issue, kind, label string) {
+	g.events[i.number] = append(g.events[i.number], &event{id: g.id(), event: kind, label: label, created: g.clock.Now()})
 }
 
 func (g *GitHub) label(name string) *label {
@@ -520,6 +552,9 @@ func (g *GitHub) editIssue(w http.ResponseWriter, r *http.Request) {
 	if in.Body != nil {
 		i.body = *in.Body
 	}
+	if in.State != "" && in.State != i.state {
+		g.record(i, map[string]string{"open": "reopened", "closed": "closed"}[in.State], "")
+	}
 	if in.State != "" {
 		i.state = in.State
 		i.stateReason = "reopened"
@@ -588,13 +623,10 @@ func (g *GitHub) removeLabel(w http.ResponseWriter, r *http.Request) {
 	if i == nil {
 		return
 	}
-	name := r.PathValue("name")
-	k := slices.IndexFunc(i.labels, func(l string) bool { return strings.EqualFold(l, name) })
-	if k < 0 {
+	if !g.removeIssueLabel(i, r.PathValue("name")) {
 		fail(w, http.StatusNotFound, "Label does not exist")
 		return
 	}
-	i.labels = slices.Delete(i.labels, k, k+1)
 	reply(w, http.StatusOK, g.labelsJSON(i.labels))
 }
 
@@ -638,6 +670,29 @@ func (g *GitHub) createComment(w http.ResponseWriter, r *http.Request) {
 	c := &comment{id: g.id(), body: in.Body, created: g.clock.Now()}
 	g.comments[i.number] = append(g.comments[i.number], c)
 	reply(w, http.StatusCreated, g.commentJSON(i.number, c))
+}
+
+func (g *GitHub) listEvents(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	i := g.pathIssue(w, r)
+	if i == nil {
+		return
+	}
+	out := []any{}
+	for _, e := range g.events[i.number] {
+		m := map[string]any{
+			"id": e.id, "node_id": fmt.Sprintf("LE_kwDOfake%d", e.id), "url": g.url("issues/events/%d", e.id),
+			"actor": user(), "event": e.event, "commit_id": nil, "commit_url": nil,
+			"created_at": ts(e.created), "performed_via_github_app": nil,
+		}
+		if e.label != "" {
+			l := g.label(e.label)
+			m["label"] = map[string]any{"name": l.name, "color": l.color}
+		}
+		out = append(out, m)
+	}
+	reply(w, http.StatusOK, page(r, out))
 }
 
 func (g *GitHub) listSubIssues(w http.ResponseWriter, r *http.Request) {

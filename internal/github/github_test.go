@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
@@ -316,5 +317,50 @@ func TestLabelNameIsNotExpandedByGh(t *testing.T) {
 	must[[]github.Label](t)(c.RemoveLabel(1, "x:branch"))
 	if want := "repos/user/project/issues/1/labels/x%3Abranch"; path != want {
 		t.Fatalf("path %q, want %q", path, want)
+	}
+}
+
+// #5-AC4: the timeline comes from the issue's events.
+func TestIssueEvents(t *testing.T) {
+	clk := clock.NewFake(clock.Epoch)
+	fake := fakegithub.New("user/project", clk)
+	c := github.New("user/project", fake.Run)
+	must[github.Issue](t)(c.CreateIssue(github.NewIssue{Title: "t", Labels: []string{"stage:2:drafting", "kind:feat"}}))
+	clk.Advance(time.Minute)
+	must[[]github.Label](t)(c.AddLabels(1, "blocked", "kind:feat"))
+	clk.Advance(time.Minute)
+	must[[]github.Label](t)(c.RemoveLabel(1, "blocked"))
+	clk.Advance(time.Minute)
+	fake.SetIssueLabels(1, "stage:3:eligible", "kind:feat")
+	clk.Advance(time.Minute)
+	must[github.Issue](t)(c.EditIssue(1, github.IssueEdit{State: "closed"}))
+	for range 120 {
+		must[[]github.Label](t)(c.AddLabels(1, "x"))
+		must[[]github.Label](t)(c.RemoveLabel(1, "x"))
+	}
+
+	events := must[[]github.Event](t)(c.Events(1))
+	if len(events) != 247 {
+		t.Fatalf("got %d events", len(events))
+	}
+	var got []string
+	for _, e := range events[:7] {
+		s := e.CreatedAt.Format("15:04") + " " + e.Event
+		if e.Label != nil {
+			s += " " + e.Label.Name
+		}
+		got = append(got, s)
+	}
+	want := []string{
+		"00:00 labeled stage:2:drafting",
+		"00:00 labeled kind:feat",
+		"00:01 labeled blocked",
+		"00:02 unlabeled blocked",
+		"00:03 unlabeled stage:2:drafting",
+		"00:03 labeled stage:3:eligible",
+		"00:04 closed",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("events\n got %q\nwant %q", got, want)
 	}
 }
