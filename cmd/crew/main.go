@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/cli"
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
@@ -31,5 +32,8 @@ func main() {
 		GH:      github.Default(),
 		Probe:   doctor.Exec,
 		Compose: compose.Default(),
+
+		HealthPoll:    2 * time.Second,
+		HealthTimeout: 2 * time.Minute,
 	}))
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 )
@@ -20,10 +21,11 @@ type Runner func(dir string, args ...string) (out []byte, code int, err error)
 // compose, as crew doctor reports.
 //
 // In a test binary it refuses to run, so an automated test never starts
-// containers. Tests give crew a fake Runner.
+// containers, unless the binary is built with the containers tag. Other
+// tests give crew a fake Runner.
 func Default() Runner {
 	return func(dir string, args ...string) ([]byte, int, error) {
-		if testing.Testing() {
+		if testing.Testing() && !containersTag {
 			return nil, 0, errors.New("refusing to run containers in a test; use a fake")
 		}
 		engine, err := engine()
@@ -32,6 +34,9 @@ func Default() Runner {
 		}
 		cmd := exec.Command(engine, append([]string{"compose"}, args...)...)
 		cmd.Dir = dir
+		// Podman otherwise prefixes every output with a banner naming its
+		// compose provider.
+		cmd.Env = append(os.Environ(), "PODMAN_COMPOSE_WARNING_LOGS=false")
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		err = cmd.Run()
@@ -42,6 +47,9 @@ func Default() Runner {
 		return out.Bytes(), cmd.ProcessState.ExitCode(), nil
 	}
 }
+
+// containersTag is set in a build with the containers tag.
+var containersTag = false
 
 func engine() (string, error) {
 	for _, e := range []string{"podman", "docker"} {
@@ -55,9 +63,19 @@ func engine() (string, error) {
 // Project is the name of ticket number's compose project.
 func Project(number int) string { return fmt.Sprintf("crew-%d", number) }
 
+// GateProject is the name of the compose project the gate uses for ticket
+// number, apart from the Dev's own.
+func GateProject(number int) string { return fmt.Sprintf("crew-%d-gate", number) }
+
 // Exec runs command, with args appended, in the app container of ticket
 // number's compose project.
 func Exec(run Runner, dir string, number int, command string, args []string) ([]byte, int, error) {
-	a := []string{"-p", Project(number), "run", "--rm", "-T", "app", "sh", "-c", command + ` "$@"`, "sh"}
+	return ExecIn(run, dir, Project(number), command, args)
+}
+
+// ExecIn runs command, with args appended, in a new app container of the
+// compose project called project.
+func ExecIn(run Runner, dir, project, command string, args []string) ([]byte, int, error) {
+	a := []string{"-p", project, "run", "--rm", "-T", "app", "sh", "-c", command + ` "$@"`, "sh"}
 	return run(dir, append(a, args...)...)
 }

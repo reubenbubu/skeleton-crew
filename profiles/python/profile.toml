@@ -7,3 +7,4 @@ test-changed = "pytest -q"   # crew appends the changed test files as arguments
 
 [tests]
 globs = ["tests/**/test_*.py", "tests/**/*_test.py"]
+skip  = ["@pytest.mark.skip", "pytest.skip(", "@pytest.mark.xfail", "pytest.xfail(", "@unittest.skip", "unittest.SkipTest", "@unittest.expectedFailure"]

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Repo is a local clone. Use one Repo per command, so each command fetches
@@ -371,5 +372,73 @@ func (r *Repo) Commit(msg string) (string, error) {
 // PushBranch pushes local branch name to origin and makes it the upstream.
 func (r *Repo) PushBranch(name string) error {
 	_, err := git(r.Dir, "push", "--quiet", "--set-upstream", "origin", "refs/heads/"+name+":refs/heads/"+name)
+	return err
+}
+
+// Clean reports whether the working tree has no changes, untracked files
+// included.
+func (r *Repo) Clean() (bool, error) {
+	out, err := git(r.Dir, "status", "--porcelain", "--untracked-files=all")
+	return out == "", err
+}
+
+// Head returns the commit that HEAD points to.
+func (r *Repo) Head() (string, error) {
+	return git(r.Dir, "rev-parse", "HEAD")
+}
+
+// Subjects lists the subjects of the commits that sha has and base does
+// not.
+func (r *Repo) Subjects(base, sha string) ([]string, error) {
+	out, err := git(r.Dir, "log", "--format=%s", base+".."+sha)
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+// Diff returns the diff from commit base to commit sha, without context
+// lines. A moved file shows as a rename, with only its changed lines.
+func (r *Repo) Diff(base, sha string) (string, error) {
+	return git(r.Dir, "diff", "-M", "--no-color", "-U0", base, sha)
+}
+
+// Files lists the paths of the files in commit sha.
+func (r *Repo) Files(sha string) ([]string, error) {
+	out, err := git(r.Dir, "ls-tree", "-r", "-z", "--name-only", sha)
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSuffix(out, "\x00"), "\x00"), nil
+}
+
+// LastChange returns the commit time of the last commit up to sha that
+// changed path.
+func (r *Repo) LastChange(sha, path string) (time.Time, error) {
+	out, err := git(r.Dir, "--literal-pathspecs", "log", "-1", "--format=%cI", sha, "--", path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339, out)
+}
+
+// AddDetached checks out commit sha, detached, in a new worktree at path,
+// in place of any worktree or directory already there.
+func (r *Repo) AddDetached(path, sha string) error {
+	if err := r.RemoveWorktree(path); err != nil {
+		return err
+	}
+	_, err := git(r.Dir, "worktree", "add", "--quiet", "--detach", path, sha)
+	return err
+}
+
+// RemoveWorktree removes the worktree at path, with any changes in it, and
+// whatever else is left at path.
+func (r *Repo) RemoveWorktree(path string) error {
+	git(r.Dir, "worktree", "remove", "--force", path)
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+	_, err := git(r.Dir, "worktree", "prune")
 	return err
 }

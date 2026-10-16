@@ -18,15 +18,20 @@ import (
 const worktree = ".crew/worktrees/feat/1/login-with-email"
 
 // containers stands in for the container engine's compose. It records each
-// call and answers with out and code.
+// call and answers with out and code, or with answer when it is set.
 type containers struct {
-	calls []string // the directory, then the arguments
-	out   string
-	code  int
+	calls  []string // the directory, then the arguments
+	out    string
+	code   int
+	answer func(dir string, args []string) (string, int)
 }
 
 func (c *containers) run(dir string, args ...string) ([]byte, int, error) {
 	c.calls = append(c.calls, dir+" "+strings.Join(args, " "))
+	if c.answer != nil {
+		out, code := c.answer(dir, args)
+		return []byte(out), code, nil
+	}
 	return []byte(c.out), c.code, nil
 }
 

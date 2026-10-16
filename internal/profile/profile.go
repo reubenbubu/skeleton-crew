@@ -18,8 +18,9 @@ type Profile struct {
 	Name      string
 	Commands  map[string]string // a step that does not apply has no command
 	TestGlobs []string
-	Docs      fs.FS // written under .crew/docs/
-	Scaffold  fs.FS // written at the root of a new project
+	Skip      []string // text that marks a skipped or disabled test
+	Docs      fs.FS    // written under .crew/docs/
+	Scaffold  fs.FS    // written at the root of a new project
 }
 
 // Commands lists the commands a profile may define.
@@ -42,23 +43,25 @@ func Builtin(name string) (Profile, error) {
 	if err != nil {
 		return Profile{}, unknown
 	}
-	cmds, globs, err := Parse(name+"/profile.toml", b)
+	p, err := Parse(name+"/profile.toml", b)
 	if err != nil {
 		return Profile{}, err
 	}
-	docs, _ := fs.Sub(root, "docs")
-	scaffold, _ := fs.Sub(root, "scaffold")
-	return Profile{Name: name, Commands: cmds, TestGlobs: globs, Docs: docs, Scaffold: scaffold}, nil
+	p.Name = name
+	p.Docs, _ = fs.Sub(root, "docs")
+	p.Scaffold, _ = fs.Sub(root, "scaffold")
+	return p, nil
 }
 
-// Parse reads the profile.toml called name, with contents b.
-func Parse(name string, b []byte) (commands map[string]string, globs []string, err error) {
+// Parse reads the profile.toml called name, with contents b, into a
+// Profile without a name, docs or scaffold.
+func Parse(name string, b []byte) (Profile, error) {
 	doc, err := toml.Parse(name, b)
 	if err != nil {
-		return nil, nil, err
+		return Profile{}, err
 	}
-	fail := func(line int, format string, a ...any) (map[string]string, []string, error) {
-		return nil, nil, &toml.Error{File: name, Line: line, Msg: fmt.Sprintf(format, a...)}
+	fail := func(line int, format string, a ...any) (Profile, error) {
+		return Profile{}, &toml.Error{File: name, Line: line, Msg: fmt.Sprintf(format, a...)}
 	}
 	for _, t := range doc.Tables {
 		if t != "commands" && t != "tests" {
@@ -70,7 +73,8 @@ func Parse(name string, b []byte) (commands map[string]string, globs []string, e
 		keys = append(keys, k)
 	}
 	slices.SortFunc(keys, func(a, b string) int { return doc.Values[a].Line - doc.Values[b].Line })
-	commands = map[string]string{}
+	commands := map[string]string{}
+	var globs, skip []string
 	globsSet := false
 	for _, k := range keys {
 		v := doc.Values[k]
@@ -84,11 +88,18 @@ func Parse(name string, b []byte) (commands map[string]string, globs []string, e
 			commands[c] = v.Str
 			continue
 		}
-		if k != "tests.globs" {
+		if k != "tests.globs" && k != "tests.skip" {
 			return fail(v.Line, "unknown key %s", k)
 		}
 		if v.Kind != toml.Strings {
 			return fail(v.Line, "%s must be an array of strings", k)
+		}
+		if k == "tests.skip" {
+			if slices.ContainsFunc(v.Strs, func(m string) bool { return strings.TrimSpace(m) == "" }) {
+				return fail(v.Line, "%s has an empty marker", k)
+			}
+			skip = v.Strs
+			continue
 		}
 		if len(v.Strs) == 0 {
 			return fail(v.Line, "%s is empty", k)
@@ -103,7 +114,7 @@ func Parse(name string, b []byte) (commands map[string]string, globs []string, e
 	if !globsSet {
 		return fail(0, "tests.globs is missing")
 	}
-	return commands, globs, nil
+	return Profile{Commands: commands, TestGlobs: globs, Skip: skip}, nil
 }
 
 // IsTest reports whether the file at name, a slash-separated path from the

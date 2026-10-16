@@ -26,6 +26,11 @@ func TestBuiltinPython(t *testing.T) {
 	if !slices.Equal(p.TestGlobs, []string{"tests/**/test_*.py", "tests/**/*_test.py"}) {
 		t.Errorf("globs: %v", p.TestGlobs)
 	}
+	// #8-AC5
+	wantSkip := []string{"@pytest.mark.skip", "pytest.skip(", "@pytest.mark.xfail", "pytest.xfail(", "@unittest.skip", "unittest.SkipTest", "@unittest.expectedFailure"}
+	if !slices.Equal(p.Skip, wantSkip) {
+		t.Errorf("skip: %v", p.Skip)
+	}
 	docs := files(t, p.Docs)
 	for _, want := range []string{"product.md", "architecture.md", "conventions.md", "adr/0001-python-stack.md"} {
 		if !slices.Contains(docs, want) {
@@ -65,9 +70,14 @@ func TestUnknownProfile(t *testing.T) {
 
 func TestParseManifest(t *testing.T) {
 	ok := "[commands]\ntest = \"t\"\ntest-changed = \"c\"\n[tests]\nglobs = [\"a\"]\n"
-	cmds, globs, err := Parse("profile.toml", []byte(ok))
-	if err != nil || !maps.Equal(cmds, map[string]string{"test": "t", "test-changed": "c"}) || !slices.Equal(globs, []string{"a"}) {
-		t.Fatalf("got %v %v %v", cmds, globs, err)
+	p, err := Parse("profile.toml", []byte(ok))
+	if err != nil || !maps.Equal(p.Commands, map[string]string{"test": "t", "test-changed": "c"}) || !slices.Equal(p.TestGlobs, []string{"a"}) || p.Skip != nil {
+		t.Fatalf("got %+v %v", p, err)
+	}
+	// #8-AC5
+	p, err = Parse("profile.toml", []byte(ok+"skip = [\"@skip\"]\n"))
+	if err != nil || !slices.Equal(p.Skip, []string{"@skip"}) {
+		t.Fatalf("got %+v %v", p, err)
 	}
 	both := "[commands]\ntest = \"t\"\ntest-changed = \"c\"\n"
 	for _, c := range []struct{ src, want string }{
@@ -78,12 +88,14 @@ func TestParseManifest(t *testing.T) {
 		{both + "[tests]\nglobs = \"a\"\n", "f:5: tests.globs must be an array of strings"},
 		{both + "[tests]\nglobs = []\n", "f:5: tests.globs is empty"},
 		{both, "f: tests.globs is missing"},
+		{both + "[tests]\nglobs = [\"a\"]\nskip = \"s\"\n", "f:6: tests.skip must be an array of strings"},
+		{both + "[tests]\nglobs = [\"a\"]\nskip = [\" \"]\n", "f:6: tests.skip has an empty marker"},
 		{"[commands]\ntest = \"t\"\n[tests]\nglobs = [\"a\"]\n", "f: commands.test-changed is missing"},
 		{"[tests]\nglobs = [\"a\"]\n", "f: commands.test is missing"},
 		{"x = 1\n", "f:1: unknown key x"},
 		{"x = 1.5\n", "f:1: unsupported value"},
 	} {
-		if _, _, err := Parse("f", []byte(c.src)); err == nil || err.Error() != c.want {
+		if _, err := Parse("f", []byte(c.src)); err == nil || err.Error() != c.want {
 			t.Errorf("%q:\ngot  %v\nwant %s", c.src, err, c.want)
 		}
 	}

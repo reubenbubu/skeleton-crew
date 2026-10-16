@@ -289,7 +289,7 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 | `crew commit --refactor "<message>"` | The tests stay green, and no behaviour tests are added |
 
 - Every test names the criterion it covers, such as `#12-AC1`.
-- At `crew ticket submit`, the gate checks that every criterion of the ticket has a test that failed before it passed.
+- At `crew ticket submit`, the gate checks that every criterion of the ticket has a test that failed before it passed: a red `log` comment on the ticket names the criterion, a test file at the gated commit still names it, and the full suite passes. A branch with no red, green or refactor commit since it left `main` holds only changes with no behaviour, so the gate skips this check for it, and the Reviewer judges whether that is true.
 - `crew` records each red result as a `log` comment on the ticket, with the test names and a failure excerpt. The record is keyed by test, not by commit, so it survives rebases. The Reviewer checks that the test failed for the right reason: an assertion about the behaviour, not a typo or a missing import.
 - Changes with no behaviour, such as documentation, configuration and knowledge files, use a plain `crew commit`. The Reviewer judges whether a change really has no behaviour.
 - Red and green steps run the profile's fast `test-changed` command. The full suite runs at the gate.
@@ -301,7 +301,10 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 ### Obsolete tests are maintained
 
 - Tests name their criteria, so `crew` finds tests whose criterion was removed, revised or belongs to a cancelled ticket. The gate flags them, and the ticket that changed the requirement updates or deletes them in the same PR.
-- The gate refuses skipped or disabled tests.
+  - The gate reads every test file at the gated commit and each ticket a criterion ID in it points to. A criterion is **removed** when its ticket's acceptance criteria no longer list it, or the ticket does not exist, and **cancelled** when its ticket is at `0:cancelled` or closed as not planned.
+  - When `crew ticket edit` changes the text of an existing criterion, it marks the line with the time, such as `- [#12-AC1] (revised 2026-10-16T09:12Z) <text>`. A test file that names the criterion is **revised** when its last commit is older than that mark.
+  - A flag is one line in the gate's output, such as `flag: tests/test_login.py names #12-AC1: removed`. Flags do not fail the gate.
+- The gate refuses skipped or disabled tests. A profile lists the markers that skip or disable a test in its stack, such as `@pytest.mark.skip`, and the gate refuses any line that the branch adds to a test file and that contains one of them. Tests skipped before the branch left `main` do not block it.
 - A commit that changes or deletes an existing test must give the reason, such as the criterion revision. The Reviewer rejects any test weakened just to make it pass.
 
 ## Conventions
@@ -339,8 +342,11 @@ There is no CI gate. `crew` runs the gate locally, and the result does not depen
   4. the ticket's compose stack, waiting until `health` succeeds
   5. `e2e` against that running stack
 - A profile leaves out the steps that do not apply to its stack.
-- On success the ticket moves to `4:waiting-review`. On failure it stays at `4:in-progress` and the Dev gets the failing output.
-- `crew` posts the result as a commit status (`crew/gate`) on that commit, so it shows on the PR. Commit statuses work on every GitHub plan and need no Actions.
+- `crew ticket submit` refuses, before running anything, when the ticket is not at `4:in-progress`, when the worktree has uncommitted changes, when the branch has no commits, or when its last commit is not pushed. The gate runs on the commit at `origin/<branch>`.
+- The checks that need no containers run first, so they fail in seconds: [TDD](#devs-write-failing-tests-first) and [skipped tests](#obsolete-tests-are-maintained).
+- The gate checks the commit out, detached, at `.crew/worktrees/gate/<ticket>` and runs in its own compose project, `crew-<ticket>-gate`, so the Dev's own environment is left alone. It starts with `down --volumes`, so every gate run starts from a fresh database, and builds the images from the gated commit. `build`, `lint` and `test` each run in a new `app` container. The stack starts with `up -d`; `crew` runs `health` in the running `app` container every 2 seconds, for up to 2 minutes, and then runs `e2e` there. The gate always ends with `down --volumes` and removes its worktree.
+- On success the ticket moves to `4:waiting-review`. On failure it stays at `4:in-progress` and the Dev gets the last 20 lines of the failing step's output, followed by one line such as `gate failed: test: exit 1; full output: .crew/logs/20261016T091244Z-gate-12.log`. The log holds the output of every step. `crew` keeps the newest 50 logs in `.crew/logs/` and deletes older ones.
+- `crew` posts the result as a commit status (`crew/gate`) on that commit, so it shows on the PR: `pending` while the gate runs, then `success` or `failure`, with the failing step in the description. Commit statuses work on every GitHub plan and need no Actions.
 - At `6:pending-merge`, if `main` has moved, `crew` rebases the branch and runs the gate again on the new commit before merging. Two PRs that pass separately cannot break `main` together.
 - Gate runs use the local machine, so the parallel cap also limits gate load.
 - Users may add their own CI. `crew` does not depend on it.
@@ -475,9 +481,10 @@ test-changed = "pytest -q"
 
 [tests]
 globs = ["tests/**/test_*.py", "tests/**/*_test.py"]
+skip  = ["@pytest.mark.skip", "pytest.skip(", "@unittest.skip"]
 ```
 
-A command that is left out is a step that does not apply. `crew` runs `test-changed` with the changed test files appended as arguments.
+A command that is left out is a step that does not apply. `crew` runs `test-changed` with the changed test files appended as arguments. `skip` lists the text that marks a skipped or disabled test, which the gate refuses in added test lines; it is optional.
 
 Every profile's `compose.yaml` has a service called `app`, which runs the profile's commands: `crew` runs `<engine> compose -p crew-<ticket> run --rm -T app sh -c '<command>'` in the ticket's worktree. The engine is the first of Podman and Docker that has compose, as `crew doctor` reports.
 
@@ -506,7 +513,7 @@ AGENTS.md                 the seed file
 .crew/
   crew.toml               configuration
   lead.lock               which DM session holds the lead; not committed
-  logs/                   full gate and test output; not committed, pruned automatically
+  logs/                   full gate output; not committed, the newest 50 kept
   worktrees/              one worktree per ticket in flight; not committed
   docs/
     product.md            PM: what the product is, its users, glossary, your standing preferences
@@ -562,7 +569,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew ticket new "<title>" [--priority <p>] [--kind <k>] [--intake] [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
-| `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change |
+| `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change. Marks a criterion whose text it changes as `(revised <time>)` |
 | `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM |
 | `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without numbered acceptance criteria |
 

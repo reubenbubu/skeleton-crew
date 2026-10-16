@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
@@ -26,6 +27,8 @@ type Env struct {
 	GH             github.Runner           // runs gh
 	Probe          doctor.Probe            // runs local tools for checks
 	Compose        compose.Runner          // runs the container engine's compose
+	HealthPoll     time.Duration           // how often the gate tries health
+	HealthTimeout  time.Duration           // how long the gate tries health
 }
 
 // Run executes crew with args, which exclude the program name, and returns

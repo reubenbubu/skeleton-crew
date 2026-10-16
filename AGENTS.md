@@ -25,7 +25,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `cmd/crew/` | The CLI entry point |
 | `internal/` | CLI implementation packages |
 | `profiles/` | Built-in profiles, embedded into the binary |
-| `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `self-build.sh` builds `crew` |
+| `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `test-containers.sh` runs the tests that need a container engine; `self-build.sh` builds `crew` |
 | `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 
 ## Building and testing
@@ -35,6 +35,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 - Every build uses `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and `-ldflags "-s -w -buildid= -X main.version=<version>"`, so builds of the same commit are byte-identical.
 - The user's machine needs no Go toolchain; `scripts/self-build.sh` compiles inside the official Go container image. Run tests with `scripts/test.sh`; it fails if any test takes longer than one second.
 - Commands take time from the injectable clock in `internal/clock` and never call the `time` package for the current time or for waiting. Every polling interval is a parameter.
+- Tests that need a container engine carry the `containers` build tag, so a plain `go test ./...` needs no containers. Only a binary built with that tag lets `compose.Default` run in a test. `scripts/test-containers.sh` builds those test binaries in the Go container image and runs them on the host, where the engine is; they are exempt from the one-second limit. Keep them few and small.
 - Automated tests must not touch real GitHub repositories. All GitHub access goes through `internal/github`, which runs `gh api`. Tests give it the in-memory fake in `internal/github/fakegithub`, which stands in for `gh` and answers with GitHub's JSON and errors. Its `Hook` lets a test change state between two requests, for example to simulate a label race.
 - In a test binary, `crew` refuses to run a `gh` outside the temporary directory and allows git only local remotes, so a test that would reach a real GitHub host fails. Git tests use local bare repositories as `origin`. A test that needs a GitHub URL as `origin` sets `GIT_CONFIG_GLOBAL` to a file whose `url.<base>.insteadOf` points that URL at a local bare repository.
 - Field tests run the whole pipeline against a real repository: the agent plays the user, sends requests to a PM or DM session, and checks the tickets, PRs, gates, reviews and merges that result. Each field test creates its own private repository with a randomized name and deletes it when the test is done. Never use one of the user's existing repositories.

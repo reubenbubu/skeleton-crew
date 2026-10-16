@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/github"
 )
@@ -151,4 +152,87 @@ func OpenPR(c *github.Client, number int, kind, branch string) (pr int, opened b
 		Base:  "main",
 	})
 	return p.Number, err == nil, err
+}
+
+// Known is what the gate needs to know of a ticket that a test names: its
+// criteria, each with the time it was last revised, or the zero time, and
+// whether it was cancelled.
+type Known struct {
+	Criteria  map[string]time.Time
+	Cancelled bool
+}
+
+var criterionLine = regexp.MustCompile(`(?m)^\s*[-*] \[(#([0-9]+)-AC[0-9]+)\]\s+(?:\(revised (\S+)\))?`)
+
+// Criteria returns the acceptance criteria of ticket number, from its body,
+// each with the time a (revised <time>) mark gives it, or the zero time.
+func Criteria(number int, body string) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, m := range criterionLine.FindAllStringSubmatch(sections(body)["Acceptance criteria"], -1) {
+		if m[2] != strconv.Itoa(number) {
+			continue
+		}
+		at, _ := time.Parse("2006-01-02T15:04Z", m[3])
+		out[m[1]] = at
+	}
+	return out
+}
+
+// Index reads every ticket, open or closed, as the gate needs to know it.
+func Index(c *github.Client) (map[int]Known, error) {
+	issues, err := c.Issues("all")
+	if err != nil {
+		return nil, err
+	}
+	out := map[int]Known{}
+	for _, i := range issues {
+		if i.PullRequest != nil {
+			continue
+		}
+		out[i.Number] = Known{
+			Criteria:  Criteria(i.Number, i.Body),
+			Cancelled: fieldsOf(i).Stage == "0:cancelled" || i.StateReason == "not_planned",
+		}
+	}
+	return out, nil
+}
+
+var redIDs = regexp.MustCompile(`#[0-9]+-AC[0-9]+`)
+
+// Red returns the criteria that the red log comments on ticket number name.
+func Red(c *github.Client, number int) ([]string, error) {
+	raw, err := c.Comments(number)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, rc := range raw {
+		cm := parseComment(rc)
+		first, _, _ := strings.Cut(strings.ReplaceAll(cm.Text, "\r\n", "\n"), "\n")
+		if cm.Kind != "log" || cm.Role != "dev" || !strings.HasPrefix(first, "red: ") {
+			continue
+		}
+		for _, id := range redIDs.FindAllString(first, -1) {
+			if !slices.Contains(out, id) {
+				out = append(out, id)
+			}
+		}
+	}
+	return out, nil
+}
+
+// InProgress reads ticket number, which must be at 4:in-progress.
+func InProgress(c *github.Client, number int) (github.Issue, error) {
+	i, f, err := get(c, number)
+	if err == nil && f.Stage != "4:in-progress" {
+		err = stageChanged(number, f.Stage, "4:in-progress")
+	}
+	return i, err
+}
+
+// Submit moves ticket number from 4:in-progress to 4:waiting-review, once
+// the gate has passed.
+func Submit(c *github.Client, number int) error {
+	_, err := move(c, number, "4:in-progress", "4:waiting-review", nil)
+	return err
 }
