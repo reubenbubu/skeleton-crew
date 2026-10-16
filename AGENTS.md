@@ -25,12 +25,16 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `cmd/crew/` | The CLI entry point |
 | `internal/` | CLI implementation packages |
 | `profiles/` | Built-in profiles, embedded into the binary |
+| `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `self-build.sh` builds `crew` |
 | `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 
 ## Building and testing
 
-- `crew` is written in Go and builds with `CGO_ENABLED=0` and `-trimpath`, so builds are reproducible.
-- The user's machine needs no Go toolchain; the self-build path compiles inside the official Go container image.
+- `crew` is written in Go, using the standard library only. The module path is `github.com/reubenbubu/skeleton-crew`.
+- Go is pinned to 1.27.2, and the container image to `golang:1.27.2` by digest in `scripts/go.sh`. Change both together.
+- Every build uses `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and `-ldflags "-s -w -buildid= -X main.version=<version>"`, so builds of the same commit are byte-identical.
+- The user's machine needs no Go toolchain; `scripts/self-build.sh` compiles inside the official Go container image. Run tests with `scripts/test.sh`; it fails if any test takes longer than one second.
+- Commands take time from the injectable clock in `internal/clock` and never call the `time` package for the current time or for waiting. Every polling interval is a parameter.
 - Automated tests must not touch real GitHub repositories. Use fakes or a local test server for the GitHub API.
 - Field tests run the whole pipeline against a real repository: the agent plays the user, sends requests to a PM or DM session, and checks the tickets, PRs, gates, reviews and merges that result. Each field test creates its own private repository with a randomized name and deletes it when the test is done. Never use one of the user's existing repositories.
 

@@ -474,6 +474,10 @@ AGENTS.md                 the seed file
 
 `crew` is a single Go binary with no runtime dependencies. Built-in profiles, templates and role rules are embedded in it, so no framework code is copied into your project. Commands print terse, stable output for agents, and structured output with `--json`. Times are absolute UTC timestamps.
 
+Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte.
+
+An unknown command or flag exits non-zero with one line that names it, such as `unknown flag: --bogus`.
+
 `crew` does the deterministic work: the normal path and the invariants, such as stage order, the gate before merge, TDD checks, staying in sync with GitHub and keeping secrets out. When it meets something outside the normal path, such as an unusual git state or an unexpected GitHub response, it changes nothing, stops and reports what it found. The DM then handles the case with judgement. It may use `git` and `gh` directly, unlike Devs and Reviewers, but it must still respect the invariants, and it records what it did as a `decision` comment.
 
 There is no generic "set stage" command. Each stage change has exactly one command, and that command checks that the move is legal. This is how `crew` keeps stage numbers from going backwards.
@@ -482,6 +486,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 | Command | Does |
 | --- | --- |
+| `crew --version` | Prints the version, such as `v0.1.0` |
 | `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
 | `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks, knowledge size and harness wiring; runs one gate |
 | `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
