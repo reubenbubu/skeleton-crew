@@ -21,6 +21,12 @@ type Result struct {
 // gh could not be run at all; a non-zero exit is reported in Result.Code.
 type Runner func(args []string, stdin []byte) (Result, error)
 
+// Command is the name of the gh executable.
+const Command = "gh"
+
+// Default is the Runner that runs gh from the PATH.
+func Default() Runner { return Exec(Command) }
+
 // Exec returns a Runner that runs the gh executable at path, normally "gh".
 //
 // In a test binary it refuses any gh outside the temporary directory, so an

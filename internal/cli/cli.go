@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
+	"github.com/reubenbubu/skeleton-crew/internal/doctor"
+	"github.com/reubenbubu/skeleton-crew/internal/github"
 	"github.com/reubenbubu/skeleton-crew/internal/output"
 )
 
@@ -18,11 +20,23 @@ type Env struct {
 	Version        string
 	Stdout, Stderr io.Writer
 	Clock          clock.Clock
+	Dir            string                  // the working directory
+	Getenv         func(key string) string // reads the environment
+	GH             github.Runner           // runs gh
+	Probe          doctor.Probe            // runs local tools for checks
 }
 
 // Run executes crew with args, which exclude the program name, and returns
 // the exit code.
 func Run(args []string, env Env) int {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd, ok := commands[args[0]]
+		if !ok {
+			fmt.Fprintf(env.Stderr, "unknown command: %s\n", args[0])
+			return 2
+		}
+		return cmd(args[1:], env)
+	}
 	fs := flag.NewFlagSet("crew", flag.ContinueOnError)
 	version := fs.Bool("version", false, "")
 	asJSON := fs.Bool("json", false, "")

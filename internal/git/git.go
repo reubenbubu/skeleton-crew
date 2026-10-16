@@ -165,3 +165,94 @@ func (r *Repo) mainWorktree() (string, error) {
 	}
 	return "", nil
 }
+
+// Toplevel returns the root of the git repository that contains dir, or ""
+// when dir is in no repository.
+func Toplevel(dir string) (string, error) {
+	top, err := git(dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if strings.Contains(err.Error(), "not a git repository") {
+			return "", nil
+		}
+		return "", err
+	}
+	return top, nil
+}
+
+// Init makes dir a new repository whose branch is main.
+func Init(dir string) error {
+	_, err := git(dir, "init", "--quiet", "--initial-branch=main")
+	return err
+}
+
+// Origin returns the URL of origin as configured, or "" when there is no
+// origin.
+func (r *Repo) Origin() (string, error) {
+	url, err := git(r.Dir, "config", "--get", "remote.origin.url")
+	// git config exits 1, saying nothing, when the key is not set.
+	if e, ok := err.(*Error); ok && e.Detail == "exit status 1" {
+		return "", nil
+	}
+	return url, err
+}
+
+func (r *Repo) AddOrigin(url string) error {
+	_, err := git(r.Dir, "remote", "add", "origin", url)
+	return err
+}
+
+// CurrentBranch returns the branch that is checked out, even one with no
+// commits yet.
+func (r *Repo) CurrentBranch() (string, error) {
+	b, err := git(r.Dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err != nil {
+		return "", &Error{Detail: "HEAD is detached"}
+	}
+	return b, nil
+}
+
+// Changed reports whether path has changes that are not committed,
+// including when it is untracked.
+func (r *Repo) Changed(path string) (bool, error) {
+	out, err := git(r.Dir, "status", "--porcelain", "--untracked-files=all", "--", path)
+	return out != "", err
+}
+
+// CommitOnly commits paths, and nothing else, to the current branch and
+// returns the new commit. Other staged and unstaged changes stay as they
+// are.
+func (r *Repo) CommitOnly(msg string, paths []string) (string, error) {
+	if _, err := git(r.Dir, append([]string{"add", "--"}, paths...)...); err != nil {
+		return "", err
+	}
+	if _, err := git(r.Dir, append([]string{"commit", "--quiet", "--only", "-m", msg, "--"}, paths...)...); err != nil {
+		return "", err
+	}
+	return git(r.Dir, "rev-parse", "HEAD")
+}
+
+// LocalMain returns the commit local main points to, or "" when main has no
+// commits yet.
+func (r *Repo) LocalMain() (string, error) {
+	sha, err := git(r.Dir, "rev-parse", "--verify", "--quiet", "refs/heads/main^{commit}")
+	if err != nil {
+		return "", nil
+	}
+	return sha, nil
+}
+
+// PushMain pushes local main to origin and makes origin/main its upstream.
+func (r *Repo) PushMain() error {
+	_, err := git(r.Dir, "push", "--quiet", "--set-upstream", "origin", "refs/heads/main:refs/heads/main")
+	return err
+}
+
+// HasBranch fetches from origin, unless this Repo already has, and reports
+// whether origin has branch name.
+func (r *Repo) HasBranch(name string) (bool, error) {
+	if err := r.fetch(); err != nil {
+		return false, err
+	}
+	_, err := git(r.Dir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+name+"^{commit}")
+	return err == nil, nil
+}

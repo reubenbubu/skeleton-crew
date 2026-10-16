@@ -1,5 +1,6 @@
 // Package github is the only way crew talks to GitHub. Every read and write
-// is one `gh api` call; no other package runs gh or calls the API.
+// is one `gh api` call; no other package runs gh or calls the API. Version
+// and GitProtocol also run gh, but only read its local installation.
 //
 // A Client stops at the first unexpected response: every later call returns
 // the same error without running gh, so a command that hits one makes no
@@ -32,6 +33,7 @@ func New(repo string, run Runner) *Client {
 type Error struct {
 	Method, Path string // Path leaves out the query
 	Status       int    // 0 when gh failed before any HTTP response
+	Exit         int    // gh's exit code when it failed before any HTTP response
 	Detail       string
 }
 
@@ -85,7 +87,7 @@ func (c *Client) call(method, path string, body, out any, want []int) (int, erro
 		if line == "" {
 			line = fmt.Sprintf("exit %d with no HTTP response", res.Code)
 		}
-		return fail(0, oneLine(line))
+		return 0, &Error{Method: method, Path: short, Exit: res.Code, Detail: oneLine(line)}
 	}
 	if !slices.Contains(want, status) {
 		return fail(status, detail(resp))

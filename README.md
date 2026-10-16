@@ -37,19 +37,27 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
    - **GitHub release (default):** downloads the pinned release binary and verifies its checksum and GitHub artifact attestation.
    - **Build from source:** clones the pinned tag and builds it inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so a local build matches the release checksum byte for byte.
    - If you already have Go: `go install` at the pinned tag.
-3. Asks you which profile the project uses, then runs `crew init` with your answers. `crew init` takes flags only; the agent has the conversation with you.
+3. Asks you which profile the project uses, then runs `crew init` with your answers. `crew init` takes flags only and never prompts; the agent has the conversation with you.
 4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
 
 ### What `crew init` does
 
-1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
+```
+crew init --profile <name> [--harness <name>] [--repo <owner>/<name>] [--public] [--json]
+```
+
+1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock` to `.gitignore`.
-4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
-5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock` to `.gitignore`.
+4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md` and the files `crew init` writes.
+5. **Commit:** commits only the files it created and pushes them to `main`, with the message `Set up Skeleton Crew`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
+
+Running `crew init` again is safe. It never overwrites a file, adds only what is missing, and makes no commit when nothing is missing. If an earlier run committed but could not push to a new repository, it pushes.
+
+It changes nothing and reports why when `origin` is not on github.com, when the checkout is not on `main`, when `main` has diverged from `origin/main`, when `.gitignore` has uncommitted changes, or when an existing `.crew/crew.toml` names a different profile.
 
 ### Existing projects
 
@@ -171,7 +179,14 @@ Open issues without a stage label, such as issues you create on GitHub, are labe
 
 ## Parallelism
 
-Several Devs can work at once, up to a cap in `.crew/crew.toml` (default 3). Each ticket in flight has its own:
+Several Devs can work at once, up to a cap in `.crew/crew.toml`:
+
+```toml
+[parallel]
+devs = 3
+```
+
+Each ticket in flight has its own:
 
 - git branch and worktree; see [Conventions](#conventions),
 - compose project (`crew-<ticket>`) with automatically assigned ports.
@@ -216,7 +231,7 @@ top_attempts = 2   # retries at max_tier before the ticket comes to you
 - Retries at `max_tier` are limited by `[escalation] top_attempts` (default 2). `crew` counts them from the ticket's label history. Past the limit, `crew` refuses to start another Dev, sets `blocked` and posts a `question` comment summarising what was tried, so the ticket comes to you.
 - Splitting does not use the retry budget, because it changes the plan. The new tickets start at `2:drafting`, so the PM writes their acceptance criteria, and their first attempt uses rank 1. A ticket created by a split cannot be split again; if it reaches the limit, it comes to you.
 - You set the model and effort of the PM and DM yourself, in your harness session. `crew` sets them for Devs and Reviewers.
-- `crew init` fills in default models for your harness. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
+- `crew init` fills in default models for your harness. It detects the harness from the environment (`AI_AGENT`, `CLAUDECODE`, `OPENCODE`), and `--harness <name>` overrides the detection. For Claude Code the ranks get the model aliases `haiku`, `sonnet` and `opus`, which follow new model releases. For any other harness, `model` is left empty, which means the session's model. You can also tell the DM in conversation, for example "use cheaper models" or "use rank 3 for #12".
 - Effort levels are `low`, `medium`, `high` and `max`. `crew` maps them to each harness's own settings.
 - If a harness cannot set effort per subagent, only the model applies. If it cannot set the model either, every agent uses the session's settings.
 
@@ -421,6 +436,22 @@ The core of Skeleton Crew knows nothing about languages or frameworks. A **profi
 - a starter scaffold
 - database migration rules where the stack has a database: naming, forward-only changes, and renumbering on rebase if the naming needs it. Applied migrations are never edited; fixes go forward. Every gate run starts from a fresh database.
 
+A profile is a directory with a `profile.toml`, a `docs/` folder that seeds `.crew/docs/`, and a `scaffold/` folder holding the `Containerfile`, the `compose.yaml` and the starter files:
+
+```toml
+[commands]
+setup        = "pip install --no-cache-dir -e '.[dev]'"
+build        = "python -m compileall -q src"
+lint         = "ruff check . && ruff format --check ."
+test         = "pytest -q"
+test-changed = "pytest -q"
+
+[tests]
+globs = ["tests/**/test_*.py", "tests/**/*_test.py"]
+```
+
+A command that is left out is a step that does not apply. `crew` runs `test-changed` with the changed test files appended as arguments.
+
 Built-in profiles: **python**, **node-ts**, **java-spring**. At bootstrap you can choose one of them or describe your own stack, and the DM writes a custom profile for it.
 
 The application always runs in containers, never directly on the host. Agents run on the host through your harness, but everything the code needs runs through compose: tests, builds, the app and its database. Your machine needs no language toolchains.
@@ -474,6 +505,8 @@ AGENTS.md                 the seed file
 
 `crew` is a single Go binary with no runtime dependencies. Built-in profiles, templates and role rules are embedded in it, so no framework code is copied into your project. Commands print terse, stable output for agents, and structured output with `--json`. Times are absolute UTC timestamps.
 
+`.crew/crew.toml` and `profile.toml` use a strict subset of TOML: comments, `[table]` and `[a.b]` headers, bare keys, and values that are basic strings, decimal integers, booleans or one-line arrays of strings. Every file `crew` accepts is valid TOML. Anything outside the subset, and any unknown key, is an error that names the file and line, such as `.crew/crew.toml:7: unsupported value`. The file also records the profile, as `profile = "python"`.
+
 Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte.
 
 `crew` reaches GitHub only through `gh api`, with your own `gh` login. It never reads, prints or stores the token.
@@ -490,7 +523,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew --version` | Prints the version, such as `v0.1.0` |
 | `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
-| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks, knowledge size and harness wiring; runs one gate |
+| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks, knowledge size and harness wiring; runs one gate. Prints one line per check, such as `ok git 2.47.1` or `fail gh-auth: run in your own terminal: gh auth login`, and exits non-zero if any check fails |
 | `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
 | `crew brief <role> [<ticket>]` | Prints an agent's briefing, with the model and effort to use |
 

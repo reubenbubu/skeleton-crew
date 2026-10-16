@@ -39,18 +39,22 @@ type GitHub struct {
 	clock clock.Clock
 	mux   *http.ServeMux
 
-	mu        sync.Mutex
-	requests  []string
-	nextID    int64
-	issues    []*issue // issues and pull requests share numbers; index is number-1
-	labels    []*label
-	comments  map[int][]*comment
-	parent    map[int]int
-	blockedBy map[int][]int
-	branches  map[string]string
-	reviews   map[int][]*review
-	statuses  map[string][]*status
-	runs      []*run
+	mu          sync.Mutex
+	missing     bool // the repository does not exist yet
+	public      bool
+	loggedOut   bool
+	gitProtocol string
+	requests    []string
+	nextID      int64
+	issues      []*issue // issues and pull requests share numbers; index is number-1
+	labels      []*label
+	comments    map[int][]*comment
+	parent      map[int]int
+	blockedBy   map[int][]int
+	branches    map[string]string
+	reviews     map[int][]*review
+	statuses    map[string][]*status
+	runs        []*run
 }
 
 type issue struct {
@@ -133,6 +137,9 @@ func New(repo string, c clock.Clock) *GitHub {
 		"GET " + p + "commits/{sha}/status":                g.combinedStatus,
 		"GET " + p + "actions/runs":                        g.listRuns,
 	}
+	routes["GET /user"] = g.getUser
+	routes["POST /user/repos"] = g.createRepo
+	routes["POST /orgs/{org}/repos"] = g.createRepo
 	for pattern, h := range routes {
 		g.mux.HandleFunc(pattern, h)
 	}
@@ -148,8 +155,19 @@ func (g *GitHub) Run(args []string, stdin []byte) (github.Result, error) {
 	usage := func(msg string) (github.Result, error) {
 		return github.Result{Stderr: []byte(msg + "\n"), Code: 1}, nil
 	}
-	if len(args) == 0 || args[0] != "api" {
+	g.mu.Lock()
+	loggedOut, protocol := g.loggedOut, g.gitProtocol
+	g.mu.Unlock()
+	switch {
+	case slices.Equal(args, []string{"--version"}):
+		return github.Result{Stdout: []byte("gh version " + Version + " (2024-03-26)\nhttps://github.com/cli/cli/releases/tag/v" + Version + "\n")}, nil
+	case slices.Equal(args, []string{"config", "get", "git_protocol", "--host", "github.com"}):
+		return github.Result{Stdout: []byte(protocol + "\n")}, nil
+	case len(args) == 0 || args[0] != "api":
 		return usage(fmt.Sprintf("fake gh: unsupported command %q", args))
+	case loggedOut:
+		// What gh prints, and its exit code, when it has no login.
+		return github.Result{Stderr: []byte("To get started with GitHub CLI, please run:  gh auth login\n"), Code: 4}, nil
 	}
 	method, path, include, input := http.MethodGet, "", false, false
 	for i := 1; i < len(args); i++ {
@@ -213,6 +231,13 @@ func (g *GitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Github-Request-Id", "FAKE:0001")
+	g.mu.Lock()
+	missing := g.missing
+	g.mu.Unlock()
+	if missing && strings.HasPrefix(r.URL.Path, "/repos/"+g.repo+"/") {
+		fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
 	g.mux.ServeHTTP(w, r)
 }
 
@@ -906,4 +931,83 @@ func (g *GitHub) listRuns(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	reply(w, http.StatusOK, map[string]any{"total_count": len(out), "workflow_runs": page(r, out)})
+}
+
+// Version is the gh version the fake reports.
+const Version = "2.46.0"
+
+// SetExists sets whether the repository exists. A new fake's repository
+// exists; until it does, its endpoints answer 404 and it can be created.
+func (g *GitHub) SetExists(exists bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.missing = !exists
+}
+
+func (g *GitHub) Exists() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return !g.missing
+}
+
+// Private reports whether the repository is private.
+func (g *GitHub) Private() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return !g.public
+}
+
+// SetLoggedIn sets whether gh has a login. Without one, every API call fails
+// before any HTTP request, as gh does.
+func (g *GitHub) SetLoggedIn(in bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.loggedOut = !in
+}
+
+// SetGitProtocol sets what gh's git_protocol setting holds: "", https or ssh.
+func (g *GitHub) SetGitProtocol(p string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.gitProtocol = p
+}
+
+func (g *GitHub) getUser(w http.ResponseWriter, r *http.Request) {
+	reply(w, http.StatusOK, user())
+}
+
+// createRepo serves both POST /user/repos and POST /orgs/{org}/repos. Only
+// the fake's own repository can be created.
+func (g *GitHub) createRepo(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name    string `json:"name"`
+		Private bool   `json:"private"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	owner := r.PathValue("org")
+	if owner == "" {
+		owner = Login
+	}
+	full := owner + "/" + in.Name
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if full != g.repo {
+		fail(w, http.StatusUnprocessableEntity, "fake github: only "+g.repo+" can be created")
+		return
+	}
+	if !g.missing {
+		fail(w, http.StatusUnprocessableEntity, "Repository creation failed.",
+			map[string]any{"resource": "Repository", "code": "custom", "field": "name", "message": "name already exists on this account"})
+		return
+	}
+	g.missing, g.public = false, !in.Private
+	reply(w, http.StatusCreated, map[string]any{
+		"id": g.id(), "node_id": "R_kgDOfake", "name": in.Name, "full_name": full, "private": in.Private,
+		"owner":    map[string]any{"login": owner, "id": 1, "type": "User"},
+		"html_url": "https://github.com/" + full, "url": "https://api.github.com/repos/" + full,
+		"clone_url": "https://github.com/" + full + ".git", "ssh_url": "git@github.com:" + full + ".git",
+		"default_branch": "main", "created_at": ts(g.clock.Now()),
+	})
 }
