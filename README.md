@@ -383,12 +383,13 @@ Records are kept per harness, so a project used from several harnesses has one r
 Whether it is `crew events --wait` or the lead DM's own, the wiring must:
 
 1. **Be event-driven.** The lead DM wakes only when something happened: a Dev or Reviewer finished, a ticket became eligible, a question was answered, or a handoff went stale. Context then grows with work done, not with time. Compaction is safe because all state is on GitHub.
-2. **Prefer fresh context.** If the harness can start a fresh, short session per event, each wake reads `crew status`, does one round of work and ends.
-3. **Live inside the harness.** No cron jobs, system services or other processes outside the harness. A wait left behind when a session ends may keep running inside the harness until it is replaced.
-4. **Leave you in control.** It stops when the session closes or when you say so, and never blocks you from talking to a DM.
-5. **Be verifiable.** `crew doctor` checks that `.crew/crew.toml` records wiring for the harness in use. The self-test is the live check.
+2. **Live inside the harness.** No cron jobs, system services or other processes outside the harness. A wait left behind when a session ends may keep running inside the harness until it is replaced.
+3. **Leave you in control.** It stops when the session closes or when you say so, and never blocks you from talking to a DM.
+4. **Be verifiable.** `crew doctor` checks that `.crew/crew.toml` records wiring for the harness in use. The self-test is the live check.
 
 Without wiring, everything still works: the lead DM acts when you prompt it.
+
+The lead DM is one long session. Its context grows only with the work it does, and compaction is safe. To save tokens, you can start a fresh lead DM session at any time: it takes the lead and picks up where the old one left off, as described in [Session recovery](#session-recovery). Devs and Reviewers still running in the old session stop when you close it, and the new lead DM restarts them.
 
 The recommended setup is one lead DM session that does the work, and a conversational DM session that you talk to.
 
