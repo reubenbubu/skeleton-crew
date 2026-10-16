@@ -22,6 +22,7 @@ var commands = map[string]func([]string, Env) int{
 	"env":    runEnv,
 	"run":    runRun,
 	"review": runReview,
+	"brief":  runBrief,
 	"merge":  runMerge,
 }
 

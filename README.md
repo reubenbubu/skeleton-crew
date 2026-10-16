@@ -132,7 +132,7 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 
 ### Comments and terse views
 
-Agents never call the GitHub API or `gh` directly. They go through `crew`, which returns compact views. It drops node IDs, URLs, label colours, reactions and other API structure. Labels become fields such as `stage=4:in-progress`. Times are absolute UTC timestamps, never relative ("2h ago" goes stale as soon as it is read). Ticket bodies and comments are never altered.
+Agents never call the GitHub API or `gh` directly. They go through `crew`, which returns compact views. Agents may read with `git`, such as `git diff` and `git log`, but `crew` makes every commit, push and branch. The DM alone may change things with `git` and `gh` directly: to handle an exception, to resolve a trivial merge conflict, or to open a knowledge-only PR. It drops node IDs, URLs, label colours, reactions and other API structure. Labels become fields such as `stage=4:in-progress`. Times are absolute UTC timestamps, never relative ("2h ago" goes stale as soon as it is read). Ticket bodies and comments are never altered.
 
 ```
 $ crew ticket show 12
@@ -324,7 +324,7 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 
 ## Review and merge
 
-- Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning.
+- Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning. It reads the diff with `git diff origin/main...origin/<branch>`, and the red `log` comments with `crew ticket show <n> --all`.
 - The Reviewer posts its verdict with `crew review`. The verdict is binding: an approval goes to merge, and a rejection means a new attempt.
 - Every agent uses your `gh` login, so every PR is your own, and GitHub refuses an approval or a change request on your own PR. The verdict is therefore a comment review on the PR's head commit, whose body is a marker line, `<!-- crew:review reviewer -->`, followed by `approved` or `rejected: <reason>`. The stage label carries the binding verdict. `crew review` also posts the verdict as a `review` comment on the ticket, so `crew ticket show` shows it to the DM and to a second Reviewer.
 - A rejection the DM believes is wrong is an exception for the DM to judge, but the DM cannot overrule the Reviewer alone. It runs `crew ticket appeal <n> "<reason>"`, which moves the ticket from `4:review-rejected` back to `4:waiting-review` for a second Reviewer. That Reviewer starts fresh and sees the first rejection and the DM's reason. If it approves, the ticket goes to `5:review-approved`. If it rejects, the rejection stands.
@@ -530,16 +530,41 @@ AGENTS.md                 the seed file
 
 - `crew init` seeds these files from the chosen profile.
 - Files that belong to the application, not the crew, go where their ecosystem expects them: the `Containerfile` and `compose.yaml` at the root, and the optional deployment workflow in `.github/workflows/`. The application must not depend on `.crew/`.
-- The PM owns `product.md`. The DM curates the rest.
+- The PM owns `product.md`. The DM curates the rest. The PM's changes to `product.md` reach `main` in a knowledge-only PR that the DM opens.
 - Knowledge is curated, not an append-only log. `product.md`, `architecture.md` and `conventions.md` together stay within a size budget. `crew doctor` warns when they exceed it, and the DM condenses them, moving detail into ADRs.
 - To make the crew use your own documentation, such as an existing `docs/` folder, ask the DM. It records an ADR that tells agents where those documents are and when to read them.
 
 ### Briefings
 
-`crew brief <role> [<ticket>]` assembles everything an agent needs:
+`crew brief <role> [<ticket>]` assembles everything an agent needs. The role is `pm`, `dm`, `dev` or `reviewer`.
 
-- **In full:** the role rules, the ticket, `product.md`, `architecture.md` and `conventions.md`.
-- **As an index:** the ADRs, one line each with number, title and summary. The agent opens the ones relevant to its work.
+- **In full:** the role rules, the ticket when one is given, `product.md`, `architecture.md` and `conventions.md`.
+- **As an index:** the ADRs, one line each with number, title and summary. The agent opens the ones relevant to its work. An ADR is `.crew/docs/adr/<number>-<slug>.md`; its title is its first heading, without the number, and its summary is the text after `Summary:`.
+- **Model and effort:** for a Dev, those of the ticket's `tier:` rank; for a Reviewer, those of `models.reviewer`. A Dev briefing with a ticket that has no `tier:` label is refused, because `crew ticket start` sets it first. When the rank's `model` is empty, the briefing names no model, and the agent uses the session's model.
+- **Testing level:** the project's level, or the ticket's `testing:` label when it has one.
+- The knowledge files and ADRs are read from `origin/main` after a fetch, so every agent gets the same agreed knowledge, whatever its checkout holds.
+
+The briefing starts with a header, then one section per part, each opened by a line `=== <name>`:
+
+```
+$ crew brief dev 12
+brief dev #12
+tier=2 model=sonnet effort=medium testing=standard
+=== rules
+<the role rules>
+=== ticket
+<the terse view, as crew ticket show prints it>
+=== .crew/docs/product.md
+<product.md, verbatim>
+=== .crew/docs/architecture.md
+<architecture.md, verbatim>
+=== .crew/docs/conventions.md
+<conventions.md, verbatim>
+=== .crew/docs/adr
+0001 Python stack: Python 3.13 in containers, packaged with pyproject.toml, tested with pytest and checked with ruff.
+```
+
+A knowledge file that `main` does not hold shows as a line such as `=== .crew/docs/product.md: missing`.
 - **Code search:** if the harness provides a code index or code search tool, agents prefer it for finding code and fall back to plain search. `crew` does not detect such tools; subagents normally inherit them from the harness. Results must point into the agent's own worktree. An index of the main checkout shows `main`, not the ticket's branch, so the agent re-indexes its worktree or reads the files directly.
 
 ## The `crew` CLI

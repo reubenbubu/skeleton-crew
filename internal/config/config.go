@@ -38,7 +38,7 @@ var (
 	tables    = []string{"tiers", "models", "escalation", "testing", "parallel"}
 	counts    = []string{"models.reviewer", "models.max_tier", "escalation.top_attempts", "parallel.devs"}
 	efforts   = []string{"low", "medium", "high", "max"}
-	levels    = []string{"minimal", "standard", "thorough"}
+	Levels    = []string{"minimal", "standard", "thorough"}
 )
 
 // Parse reads the configuration file called name, with contents b, and
@@ -105,7 +105,7 @@ func Parse(name string, b []byte) (Config, error) {
 		case it.key == "profile":
 			c.Profile, err = str()
 		case it.key == "testing.level":
-			c.Testing, err = oneOf(levels)
+			c.Testing, err = oneOf(Levels)
 		case m != nil && m[2] == "effort":
 			tier(m[1]).Effort, err = oneOf(efforts)
 		case m != nil && m[2] == "name":

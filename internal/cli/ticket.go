@@ -40,7 +40,8 @@ func runTicket(args []string, env Env) int {
 
 // positional parses args into fs, allowing flags before, between and after
 // the positional arguments, which it returns. names are the positional
-// arguments the command takes, such as <n>; each must be given and not blank.
+// arguments the command takes, such as <n>; each must be given and not
+// blank, except an optional one such as [<n>], which may be left out.
 func positional(fs *flag.FlagSet, args []string, names ...string) ([]string, error) {
 	var pos []string
 	for {
@@ -61,6 +62,9 @@ func positional(fs *flag.FlagSet, args []string, names ...string) ([]string, err
 		return nil, usageError{"unexpected argument: " + pos[len(names)]}
 	}
 	for k, name := range names {
+		if k >= len(pos) && strings.HasPrefix(name, "[") {
+			break
+		}
 		if k >= len(pos) || strings.TrimSpace(pos[k]) == "" {
 			return nil, usageError{"missing argument: " + name}
 		}

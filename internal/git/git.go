@@ -49,10 +49,16 @@ func (e *DivergedError) Error() string {
 }
 
 // git runs git in dir and returns its trimmed output.
+func git(dir string, args ...string) (string, error) {
+	out, err := raw(dir, args...)
+	return strings.TrimSpace(out), err
+}
+
+// raw runs git in dir and returns its output as it is.
 //
 // In a test binary it allows only local remotes, so an automated test can
 // never reach a real GitHub host.
-func git(dir string, args ...string) (string, error) {
+func raw(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0")
 	if testing.Testing() {
@@ -67,7 +73,7 @@ func git(dir string, args ...string) (string, error) {
 		}
 		return "", &Error{Args: args, Detail: strings.Join(strings.Fields(reason(detail)), " ")}
 	}
-	return strings.TrimSpace(out.String()), nil
+	return out.String(), nil
 }
 
 // reason picks the line of git's stderr that says why it failed: the first
@@ -410,6 +416,19 @@ func (r *Repo) Files(sha string) ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(strings.TrimSuffix(out, "\x00"), "\x00"), nil
+}
+
+// Read returns the contents of the file at path in commit sha, as they
+// are, or false if the commit has no such file.
+func (r *Repo) Read(sha, path string) (string, bool, error) {
+	if t, err := git(r.Dir, "cat-file", "-t", sha+":"+path); err != nil || t != "blob" {
+		if _, err := git(r.Dir, "cat-file", "-e", sha+"^{commit}"); err != nil {
+			return "", false, err
+		}
+		return "", false, nil
+	}
+	out, err := raw(r.Dir, "cat-file", "blob", sha+":"+path)
+	return out, err == nil, err
 }
 
 // LastChange returns the commit time of the last commit up to sha that
