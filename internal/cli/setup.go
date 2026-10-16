@@ -91,7 +91,7 @@ func runInit(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
-	checks := doctor.Run(env.Probe, env.GH)
+	checks := diagnose(env, *harness)
 	if *asJSON {
 		err = output.JSON(env.Stdout, struct {
 			setup.Result
@@ -129,26 +129,4 @@ func printInit(w io.Writer, res setup.Result, checks []doctor.Check) error {
 		}
 	}
 	return nil
-}
-
-func runDoctor(args []string, env Env) int {
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "")
-	if err := flags(fs, args); err != nil {
-		return finish(env, err, false)
-	}
-	checks := doctor.Run(env.Probe, env.GH)
-	var err error
-	if *asJSON {
-		err = output.JSON(env.Stdout, struct {
-			Checks []doctor.Check `json:"checks"`
-		}{checks})
-	} else {
-		for _, c := range checks {
-			if _, err = fmt.Fprintln(env.Stdout, c); err != nil {
-				break
-			}
-		}
-	}
-	return finish(env, err, doctor.Failed(checks))
 }

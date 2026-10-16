@@ -126,10 +126,10 @@ func TestAuthOtherFailureIsReported(t *testing.T) {
 
 // #4-AC9
 func TestFailed(t *testing.T) {
-	if Failed([]Check{{Name: "git", OK: true}}) {
-		t.Error("all ok counts as failed")
+	if Failed([]Check{Passed("git", ""), Warning("knowledge", "big")}) {
+		t.Error("ok and warn count as failed")
 	}
-	if !Failed([]Check{{Name: "git", OK: true}, {Name: "gh", OK: false}}) {
+	if !Failed([]Check{Passed("git", ""), Failure("gh", "not installed")}) {
 		t.Error("a failure does not count")
 	}
 }
@@ -141,7 +141,7 @@ func TestCheckJSONFields(t *testing.T) {
 	for i := range typ.NumField() {
 		tags = append(tags, typ.Field(i).Tag.Get("json"))
 	}
-	if strings.Join(tags, ",") != "name,ok,detail" {
+	if strings.Join(tags, ",") != "name,status,detail" {
 		t.Fatalf("tags %v", tags)
 	}
 }

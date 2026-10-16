@@ -52,6 +52,7 @@ func newProject(t *testing.T, repo string) *project {
 	p.clock = clock.NewFake(clock.Epoch)
 	p.fake = fakegithub.New(repo, p.clock)
 	p.fake.SetExists(false)
+	p.compose = (&containers{}).run
 	return p
 }
 
@@ -191,7 +192,8 @@ func TestInitNewProject(t *testing.T) {
 	}
 	sha := gitIn(t, p.origin, "rev-parse", "main")
 	want += "commit " + sha[:7] + " pushed main\n"
-	want += "ok git 2.47.1\nok podman 5.7.0 compose\nok gh 2.46.0\nok gh-auth user\n"
+	want += "ok git 2.47.1\nok podman 5.7.0 compose\nok gh 2.46.0\nok gh-auth user\nok config python\nok tiers 1-3\nok labels 26\nok knowledge 801 bytes\nok rules\n"
+	want += "warn harness: claude-code has no wiring in .crew/crew.toml; the lead DM runs the self-test at its next start\nok gate " + sha[:7] + "\n"
 	if out != want {
 		t.Fatalf("got\n%swant\n%s", out, want)
 	}
@@ -361,7 +363,7 @@ func TestInitAgainChangesNothing(t *testing.T) {
 	writes := len(p.writes())
 
 	out := p.mustInit("--profile", "python")
-	want := "repo user/app\nlabels created 0\ncommit none\nok git 2.47.1\nok podman 5.7.0 compose\nok gh 2.46.0\nok gh-auth user\n"
+	want := "repo user/app\nlabels created 0\ncommit none\nok git 2.47.1\nok podman 5.7.0 compose\nok gh 2.46.0\nok gh-auth user\nok config python\nok tiers 1-3\nok labels 26\nok knowledge 801 bytes\nok rules\nwarn harness: unknown; crew cannot tell which harness runs it\nok gate " + before[:7] + "\n"
 	if out != want {
 		t.Errorf("got\n%swant\n%s", out, want)
 	}
@@ -517,7 +519,7 @@ func TestInitReportsFailedCheck(t *testing.T) {
 	if code := Run([]string{"init", "--profile", "python"}, env); code != 1 {
 		t.Fatalf("code %d", code)
 	}
-	if !strings.HasSuffix(out.String(), "fail container-engine: install podman or docker, with compose\nok gh 2.46.0\nok gh-auth user\n") {
+	if !strings.HasSuffix(out.String(), "fail container-engine: install podman or docker, with compose\nok gh 2.46.0\nok gh-auth user\nok config python\nok tiers 1-3\nok labels 26\nok knowledge 801 bytes\nok rules\nwarn harness: unknown; crew cannot tell which harness runs it\nfail gate: not run; needs a container engine\n") {
 		t.Errorf("stdout:\n%s", out.String())
 	}
 	if errOut.String() != "" {
@@ -538,14 +540,14 @@ func TestInitJSON(t *testing.T) {
 		Commit     string   `json:"commit"`
 		Checks     []struct {
 			Name   string `json:"name"`
-			OK     bool   `json:"ok"`
+			Status string `json:"status"`
 			Detail string `json:"detail"`
 		} `json:"checks"`
 	}
 	if strings.Count(out, "\n") != 1 || json.Unmarshal([]byte(out), &got) != nil {
 		t.Fatalf("not one line of JSON:\n%s", out)
 	}
-	if got.Repo != "user/app" || !got.Created || got.Visibility != "private" || len(got.Labels) != 26 || !slices.Equal(got.Wrote, crewFiles) || got.Commit != gitIn(t, p.origin, "rev-parse", "main") || len(got.Checks) != 4 {
+	if got.Repo != "user/app" || !got.Created || got.Visibility != "private" || len(got.Labels) != 26 || !slices.Equal(got.Wrote, crewFiles) || got.Commit != gitIn(t, p.origin, "rev-parse", "main") || len(got.Checks) != 11 {
 		t.Errorf("got %+v", got)
 	}
 }

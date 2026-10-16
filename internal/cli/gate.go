@@ -220,29 +220,37 @@ func runGate(env Env, root string, repo *git.Repo, c *github.Client, number int,
 		return res, nil
 	}
 
-	res.log = filepath.ToSlash(filepath.Join(".crew", "logs", env.Clock.Now().UTC().Format("20060102T150405Z")+"-gate-"+strconv.Itoa(number)+".log"))
+	err = containerSteps(env, root, dir, compose.GateProject(number), "gate-"+strconv.Itoa(number), prof, &res)
+	return res, err
+}
+
+// containerSteps runs the gate's container steps in the worktree at dir,
+// in compose project, and logs them to a file in .crew/logs/ whose name
+// ends with name. It records the log, and any failure, in res.
+func containerSteps(env Env, root, dir, project, name string, prof profile.Profile, res *gateResult) error {
+	res.log = filepath.ToSlash(filepath.Join(".crew", "logs", env.Clock.Now().UTC().Format("20060102T150405Z")+"-"+name+".log"))
 	logs := filepath.Join(root, ".crew", "logs")
 	if err := os.MkdirAll(logs, 0o755); err != nil {
-		return res, err
+		return err
 	}
 	log, err := os.Create(filepath.Join(root, filepath.FromSlash(res.log)))
 	if err != nil {
-		return res, err
+		return err
 	}
 	f, err := gate.Run{
 		Compose: env.Compose, Clock: env.Clock, Poll: env.HealthPoll, Timeout: env.HealthTimeout,
-		Dir: dir, Project: compose.GateProject(number), Commands: prof.Commands, Log: log,
+		Dir: dir, Project: project, Commands: prof.Commands, Log: log,
 	}.Steps()
 	// Log housekeeping never decides the gate's result.
 	log.Close()
 	prune(logs)
 	if err != nil {
-		return res, err
+		return err
 	}
 	if f != nil {
 		res.failed, res.output = f.Reason, tail(f.Output, 20)
 	}
-	return res, nil
+	return nil
 }
 
 var logName = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}Z-.+\.log$`)

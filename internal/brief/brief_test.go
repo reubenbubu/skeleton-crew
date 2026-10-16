@@ -40,7 +40,7 @@ var duties = map[string][]string{
 		"deployment", "`fix` ticket", "`high`", "crew ticket fix", "triage the deployment", "crew status --as dm --lead", "stages 4 to 6",
 		"`git` and `gh` directly", "`decision` comment",
 		"recovery", "4:in-progress", "4:waiting-review", "4:review-rejected", "5:review-approved", "7:merged", "8:deploying",
-		"architecture.md", "conventions.md", "ADR", "size budget", "onboarding",
+		"architecture.md", "conventions.md", "ADR", "size budget", "contradicts a rule", "onboarding",
 		"testing:", "dependencies",
 	},
 	"dev": {

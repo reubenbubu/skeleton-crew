@@ -67,6 +67,10 @@ func Project(number int) string { return fmt.Sprintf("crew-%d", number) }
 // number, apart from the Dev's own.
 func GateProject(number int) string { return fmt.Sprintf("crew-%d-gate", number) }
 
+// DoctorProject is the name of the compose project crew doctor's gate
+// uses.
+const DoctorProject = "crew-doctor"
+
 // Exec runs command, with args appended, in the app container of ticket
 // number's compose project.
 func Exec(run Runner, dir string, number int, command string, args []string) ([]byte, int, error) {

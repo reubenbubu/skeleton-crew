@@ -59,6 +59,22 @@ Running `crew init` again is safe. It never overwrites a file, adds only what is
 
 It changes nothing and reports why when `origin` is not on github.com, when the checkout is not on `main`, when `main` has diverged from `origin/main`, when `.gitignore` has uncommitted changes, or when an existing `.crew/crew.toml` names a different profile.
 
+### What `crew doctor` checks
+
+`crew doctor` prints one line per check, in this order. Each line starts with `ok`, `warn` or `fail`. A warning names something the crew can work with but should fix; only a failure makes `crew doctor` exit non-zero.
+
+1. **Tools:** `git`, a container engine with compose (the first of Podman and Docker that has it), and `gh`.
+2. **Authentication:** `gh` is logged in. If not, the line names the command to run in your own terminal.
+3. **Configuration:** `.crew/crew.toml` parses and its profile loads, including a custom profile. A failure here ends the checks, because every later check needs the configuration.
+4. **Tier ranks:** the ranks run from 1 upwards with no gaps, and `models.reviewer` and `models.max_tier` name one of them.
+5. **Labels:** the repository has every label `crew` uses, including a `tier:` label for each rank. A missing label fails with `run crew init`, which adds it.
+6. **Knowledge size:** `product.md`, `architecture.md` and `conventions.md` at `origin/main` together hold at most 32,000 bytes. Over that it warns, and the DM condenses them.
+7. **Rules:** each line of the knowledge files and the ADRs at `origin/main` that tells agents to do what a built-in rule forbids gets a warning with its file and line: using `gh`, running `git commit`, `push`, `rebase`, `merge` or `cherry-pick`, or using one of the profile's skip markers. A line that says not to do it, with a word such as "never", "not", "no", "don't" or "avoid", is not a conflict. The rule wins either way; the DM corrects the knowledge.
+8. **Harness wiring:** `.crew/crew.toml` records wiring for the harness `crew` runs in. A missing record, or a harness `crew` cannot detect, is a warning: everything works without wiring, and the lead DM's self-test records it at its next start.
+9. **Gate:** the gate's container steps run once on the head of `origin/main`, in a detached worktree at `.crew/worktrees/gate/doctor` and the compose project `crew-doctor`, with the full output in `.crew/logs/`. It posts no commit status. An interrupted run leaves nothing that blocks the next one, which replaces the worktree and starts by taking the compose project down.
+
+A check whose prerequisite failed is reported as not run, such as `fail gate: not run; needs a container engine`.
+
 ### Existing projects
 
 Skeleton Crew works on a project that already has code. For an existing codebase, the agent suggests a profile from what it finds, and `crew init` skips the scaffold and keeps any existing `Containerfile` and `compose.yaml`.
@@ -613,7 +629,7 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 - **Rules** are built into `crew` and delivered through `crew brief <role>`. They cover role duties, the workflow and the hard rules. Agents cannot change them; they change only with a new release.
 - **Project knowledge** is written by the agents as work happens. Devs add what they learn in their ticket's PR, and the Reviewer checks it with the code. The DM records decisions from conversations with you in knowledge-only PRs.
-- If project knowledge contradicts a built-in rule, the rule wins, and `crew doctor` reports the conflict.
+- If project knowledge contradicts a built-in rule, the rule wins, and `crew doctor` reports the conflict; see [What `crew doctor` checks](#what-crew-doctor-checks).
 
 ### Layout
 
@@ -640,7 +656,7 @@ AGENTS.md                 the seed file
 - `crew init` seeds these files from the chosen profile.
 - Files that belong to the application, not the crew, go where their ecosystem expects them: the `Containerfile` and `compose.yaml` at the root, and the optional deployment workflow in `.github/workflows/`. The application must not depend on `.crew/`.
 - The PM owns `product.md`. The DM curates the rest. The PM's changes to `product.md` reach `main` in a knowledge-only PR that the DM opens.
-- Knowledge is curated, not an append-only log. `product.md`, `architecture.md` and `conventions.md` together stay within a size budget. `crew doctor` warns when they exceed it, and the DM condenses them, moving detail into ADRs.
+- Knowledge is curated, not an append-only log. `product.md`, `architecture.md` and `conventions.md` together stay within a size budget of 32,000 bytes. `crew doctor` warns when they exceed it, and the DM condenses them, moving detail into ADRs.
 - To make the crew use your own documentation, such as an existing `docs/` folder, ask the DM. It records an ADR that tells agents where those documents are and when to read them.
 
 ### Briefings
@@ -698,7 +714,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew --version` | Prints the version, such as `v0.1.0` |
 | `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
-| `crew doctor` | Checks tools, authentication, labels, configuration, tier ranks, knowledge size and harness wiring; runs one gate. Prints one line per check, such as `ok git 2.47.1` or `fail gh-auth: run in your own terminal: gh auth login`, and exits non-zero if any check fails |
+| `crew doctor` | Checks tools, authentication, configuration, tier ranks, labels, knowledge size, rule conflicts and harness wiring; runs one gate. Prints one line per check, such as `ok git 2.47.1`, `warn harness: ...` or `fail gh-auth: run in your own terminal: gh auth login`, and exits non-zero if any check fails; see [What `crew doctor` checks](#what-crew-doctor-checks) |
 | `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
 | `crew brief <role> [<ticket>]` | Prints an agent's briefing, with the model and effort to use |
 

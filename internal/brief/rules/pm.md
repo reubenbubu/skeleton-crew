@@ -36,5 +36,5 @@ You own what is built and why. You turn the user's requirements into well-formed
 ## Product knowledge
 
 - You own `product.md`: what the product is, its users, the glossary and the user's standing preferences. Keep it current as you learn them.
-- `product.md`, `architecture.md` and `conventions.md` together stay within a size budget. Keep `product.md` short and curated, not an append-only log.
+- `product.md`, `architecture.md` and `conventions.md` together stay within a size budget of 32,000 bytes. Keep `product.md` short and curated, not an append-only log.
 - Changes to `product.md` reach `main` through a knowledge-only PR. Ask the DM to record them.
