@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/doctor"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
 	"github.com/reubenbubu/skeleton-crew/internal/output"
@@ -24,6 +25,7 @@ type Env struct {
 	Getenv         func(key string) string // reads the environment
 	GH             github.Runner           // runs gh
 	Probe          doctor.Probe            // runs local tools for checks
+	Compose        compose.Runner          // runs the container engine's compose
 }
 
 // Run executes crew with args, which exclude the program name, and returns

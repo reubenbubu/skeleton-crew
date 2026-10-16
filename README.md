@@ -198,7 +198,9 @@ devs = 3
 Each ticket in flight has its own:
 
 - git branch and worktree; see [Conventions](#conventions),
-- compose project (`crew-<ticket>`) with automatically assigned ports.
+- compose project (`crew-<ticket>`) with automatically assigned ports. A profile's `compose.yaml` publishes container ports only, so the container engine picks free host ports and two tickets never clash. The project is created when the Dev first runs `crew env up` or `crew run`.
+
+Every ticket at a stage 4 holds a slot: `4:in-progress`, `4:waiting-review` and `4:review-rejected`, which keeps its slot for the next attempt. At the cap, `crew ticket start` is refused with one line such as `at-cap: 3 of 3 slots busy: #4 #5 #6`.
 
 Merges into `main` happen one at a time. Branches are rebased only at merge time, at `6:pending-merge`. Devs never rebase while they work.
 
@@ -291,6 +293,10 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 - `crew` records each red result as a `log` comment on the ticket, with the test names and a failure excerpt. The record is keyed by test, not by commit, so it survives rebases. The Reviewer checks that the test failed for the right reason: an assertion about the behaviour, not a typo or a missing import.
 - Changes with no behaviour, such as documentation, configuration and knowledge files, use a plain `crew commit`. The Reviewer judges whether a change really has no behaviour.
 - Red and green steps run the profile's fast `test-changed` command. The full suite runs at the gate.
+- Exit codes 125 to 127 mean the container engine or the shell failed, so no test ran. `crew` refuses the step with `the tests could not run`, whatever the phase.
+- `crew commit` commits every change in the ticket's worktree; there is no staging step. A red step runs `test-changed` on the test files the commit changes. Green and refactor steps run it on every test file the branch has changed since it left `main`.
+- The red `log` comment starts with a line such as `red: #12-AC1 #12-AC2`, naming the criteria in the lines the commit adds to test files, followed by the test files and the last 20 lines of the test output.
+- A refactor step must not add a test file, and its added test lines must not name a criterion that its removed lines do not. Moving a test between existing test files is fine.
 
 ### Obsolete tests are maintained
 
@@ -305,10 +311,13 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 | Branch | `<kind>/<ticket>/<slug>` | `feat/12/login-with-email` |
 | Worktree | `.crew/worktrees/<kind>/<ticket>/<slug>` | `.crew/worktrees/feat/12/login-with-email` |
 | Commit | `[<kind>:#<ticket>] <phase>: <message>` | `[feat:#12] red: login rejects an unknown email` |
+| Pull request | Title `[<kind>:#<ticket>] <ticket title>`, body `Ticket #<ticket>` | `[feat:#12] Login with email` |
 
 - `<kind>` is `feat`, `fix` or `chore`.
+- `<slug>` is the ticket's title in lower case, with every run of other characters than letters and digits turned into `-`, cut to at most 40 characters at a `-`.
 - `<phase>` is `red`, `green` or `refactor`, and is left out for changes with no behaviour.
 - `crew` creates branches and worktrees and writes the commit prefix, so agents never type it. `#<ticket>` makes GitHub link the commit to the issue.
+- `crew ticket start` creates the branch from `origin/main` and its worktree. GitHub refuses a pull request with no commits, so the first `crew commit` on the branch opens the PR. It is a normal PR, not a draft, because draft PRs are not available on every plan; the stage label says whether it is ready for review. The body has no closing keyword, so merging does not close the ticket; `crew` closes it at `9:done`.
 
 ## Review and merge
 
@@ -470,6 +479,8 @@ globs = ["tests/**/test_*.py", "tests/**/*_test.py"]
 
 A command that is left out is a step that does not apply. `crew` runs `test-changed` with the changed test files appended as arguments.
 
+Every profile's `compose.yaml` has a service called `app`, which runs the profile's commands: `crew` runs `<engine> compose -p crew-<ticket> run --rm -T app sh -c '<command>'` in the ticket's worktree. The engine is the first of Podman and Docker that has compose, as `crew doctor` reports.
+
 Built-in profiles: **python**, **node-ts**, **java-spring**. At bootstrap you can choose one of them or describe your own stack, and the DM writes a custom profile for it.
 
 The application always runs in containers, never directly on the host. Agents run on the host through your harness, but everything the code needs runs through compose: tests, builds, the app and its database. Your machine needs no language toolchains.
@@ -565,7 +576,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew dm release --lead <token>` | Gives up the lead |
 | `crew events [--wait [--test]]` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
 | `crew ticket next` | Lists eligible tickets in order |
-| `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
+| `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress` and sets `tier:<rank>`; creates the branch and worktree, and names the compose project `crew-<n>`; refused at the parallel cap |
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
 | `crew ticket split <n>` | Creates child tickets at `2:drafting`, for the PM to complete, and cancels the parent |
@@ -580,11 +591,11 @@ Run inside the ticket's worktree.
 | --- | --- |
 | `crew commit --red\|--green\|--refactor "<message>"` | Checks the TDD phase, commits and pushes immediately; see [Test-driven development](#test-driven-development) |
 | `crew commit "<message>"` | Commits a change with no behaviour, such as documentation or configuration, and pushes immediately |
-| `crew env up`, `crew env down`, `crew env logs` | Manages the ticket's compose project |
-| `crew run <command>` | Runs a profile command, such as `test` or `build`, in its container |
+| `crew env up`, `crew env down`, `crew env logs` | Starts the ticket's compose project in the background, stops it and removes its volumes, or prints its logs |
+| `crew run <command> [<args>]` | Runs a profile command, such as `test` or `build`, in the `app` container, with any arguments appended |
 | `crew ticket submit` | Runs the gate on the exact pushed commit; `4:in-progress` to `4:waiting-review` on success |
 | `crew ticket ask "<question>"` | Posts a `question` for the DM and ends the Dev's run; no stage change, and not a failed attempt |
-| `crew ticket stuck "<reason>"` | `4:in-progress` to `4:review-rejected`; counts as a failed attempt |
+| `crew ticket stuck "<reason>"` | `4:in-progress` to `4:review-rejected`; counts as a failed attempt. Posts the reason as a `log` comment starting `stuck: ` |
 
 ### Reviewer
 

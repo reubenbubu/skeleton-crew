@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -271,4 +272,104 @@ func MainRoot(dir string) (string, error) {
 	// The main worktree is always listed first.
 	first, _, _ := strings.Cut(out, "\n")
 	return strings.TrimPrefix(first, "worktree "), nil
+}
+
+// AddWorktree fetches from origin, unless this Repo already has, and checks
+// out branch in a new worktree at path. A new branch starts at origin/main.
+// A worktree of branch that is already at path is kept as it is.
+func (r *Repo) AddWorktree(path, branch string) error {
+	base, err := r.Branch("main")
+	if err != nil {
+		return err
+	}
+	out, err := git(r.Dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return err
+	}
+	var dir string
+	for line := range strings.SplitSeq(out, "\n") {
+		if d, ok := strings.CutPrefix(line, "worktree "); ok {
+			dir = d
+		} else if line == "branch refs/heads/"+branch && filepath.Clean(dir) == filepath.Clean(path) {
+			return nil
+		}
+	}
+	if _, err := git(r.Dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		_, err = git(r.Dir, "worktree", "add", "--quiet", path, branch)
+		return err
+	}
+	_, err = git(r.Dir, "worktree", "add", "--quiet", "-b", branch, path, base)
+	return err
+}
+
+// Change is one path in a diff, with its status: A added, M modified, D
+// deleted, or T type changed.
+type Change struct {
+	Status, Path string
+}
+
+// StageAll stages every change in the working tree, including untracked
+// files.
+func (r *Repo) StageAll() error {
+	_, err := git(r.Dir, "add", "--all")
+	return err
+}
+
+// Unstage resets the index to HEAD and leaves the working tree as it is.
+func (r *Repo) Unstage() error {
+	_, err := git(r.Dir, "reset", "--quiet")
+	return err
+}
+
+// Staged lists the staged changes, in path order.
+func (r *Repo) Staged() ([]Change, error) {
+	return r.changes("diff", "--cached", "--name-status", "--no-renames", "-z")
+}
+
+// ChangedSince lists the paths that the index changes from commit base,
+// in path order.
+func (r *Repo) ChangedSince(base string) ([]Change, error) {
+	return r.changes("diff", "--cached", "--name-status", "--no-renames", "-z", base)
+}
+
+func (r *Repo) changes(args ...string) ([]Change, error) {
+	out, err := git(r.Dir, args...)
+	if err != nil || out == "" {
+		return nil, err
+	}
+	f := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
+	var cs []Change
+	for k := 0; k+1 < len(f); k += 2 {
+		cs = append(cs, Change{Status: f[k], Path: f[k+1]})
+	}
+	return cs, nil
+}
+
+// StagedDiff returns the staged diff of paths, without context lines.
+func (r *Repo) StagedDiff(paths ...string) (string, error) {
+	return git(r.Dir, append([]string{"--literal-pathspecs", "diff", "--cached", "--no-renames", "--no-color", "-U0", "--"}, paths...)...)
+}
+
+// MergeBase fetches from origin, unless this Repo already has, and returns
+// the commit where HEAD left origin/<branch>.
+func (r *Repo) MergeBase(branch string) (string, error) {
+	if _, err := r.Branch(branch); err != nil {
+		return "", err
+	}
+	return git(r.Dir, "merge-base", "HEAD", "refs/remotes/origin/"+branch)
+}
+
+// Commit commits the index to the current branch and returns the new
+// commit.
+func (r *Repo) Commit(msg string) (string, error) {
+	if _, err := git(r.Dir, "commit", "--quiet", "-m", msg); err != nil {
+		return "", err
+	}
+	return git(r.Dir, "rev-parse", "HEAD")
+}
+
+// PushBranch pushes local branch name to origin and makes it the upstream.
+func (r *Repo) PushBranch(name string) error {
+	_, err := git(r.Dir, "push", "--quiet", "--set-upstream", "origin", "refs/heads/"+name+":refs/heads/"+name)
+	return err
 }

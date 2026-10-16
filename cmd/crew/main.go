@@ -7,6 +7,7 @@ import (
 
 	"github.com/reubenbubu/skeleton-crew/internal/cli"
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/doctor"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
 )
@@ -29,5 +30,6 @@ func main() {
 		Getenv:  os.Getenv,
 		GH:      github.Default(),
 		Probe:   doctor.Exec,
+		Compose: compose.Default(),
 	}))
 }

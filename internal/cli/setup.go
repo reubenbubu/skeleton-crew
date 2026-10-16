@@ -18,6 +18,9 @@ var commands = map[string]func([]string, Env) int{
 	"doctor": runDoctor,
 	"ticket": runTicket,
 	"dm":     runDM,
+	"commit": runCommit,
+	"env":    runEnv,
+	"run":    runRun,
 }
 
 // usageError is a problem with the command line: exit 2.

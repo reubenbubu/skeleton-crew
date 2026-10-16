@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/config"
 	"github.com/reubenbubu/skeleton-crew/internal/github/fakegithub"
 	"github.com/reubenbubu/skeleton-crew/internal/labels"
@@ -29,6 +30,7 @@ type project struct {
 	fake     *fakegithub.GitHub
 	clock    *clock.Fake // the fake GitHub's clock
 	env      map[string]string
+	compose  compose.Runner
 }
 
 // newProject returns an empty directory holding only AGENTS.md, for the
@@ -117,6 +119,7 @@ func (p *project) run(args ...string) (code int, stdout, stderr string) {
 	env := Env{
 		Version: "v1.2.3", Stdout: &out, Stderr: &errOut, Clock: clock.NewFake(clock.Epoch),
 		Dir: p.dir, Getenv: func(k string) string { return p.env[k] }, GH: p.fake.Run, Probe: allTools,
+		Compose: p.compose,
 	}
 	code = Run(args, env)
 	return code, out.String(), errOut.String()

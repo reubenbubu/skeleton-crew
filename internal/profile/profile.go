@@ -6,6 +6,7 @@ package profile
 import (
 	"fmt"
 	"io/fs"
+	"path"
 	"slices"
 	"strings"
 
@@ -103,4 +104,35 @@ func Parse(name string, b []byte) (commands map[string]string, globs []string, e
 		return fail(0, "tests.globs is missing")
 	}
 	return commands, globs, nil
+}
+
+// IsTest reports whether the file at name, a slash-separated path from the
+// project root, is a test file: whether it matches one of the profile's
+// globs. In a glob, ** matches any number of directories, including none.
+func (p Profile) IsTest(name string) bool {
+	for _, g := range p.TestGlobs {
+		if match(strings.Split(g, "/"), strings.Split(name, "/")) {
+			return true
+		}
+	}
+	return false
+}
+
+func match(glob, name []string) bool {
+	if len(glob) == 0 {
+		return len(name) == 0
+	}
+	if glob[0] == "**" {
+		for k := range len(name) + 1 {
+			if match(glob[1:], name[k:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(name) == 0 {
+		return false
+	}
+	ok, _ := path.Match(glob[0], name[0])
+	return ok && match(glob[1:], name[1:])
 }

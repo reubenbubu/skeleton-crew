@@ -21,6 +21,9 @@ var ticketCommands = map[string]func([]string, Env) int{
 	"show":    runTicketShow,
 	"list":    runTicketList,
 	"comment": runTicketComment,
+	"start":   runTicketStart,
+	"ask":     runTicketAsk,
+	"stuck":   runTicketStuck,
 }
 
 func runTicket(args []string, env Env) int {
