@@ -3,6 +3,7 @@ package github
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +38,18 @@ type Comment struct {
 	Body      string    `json:"body"`
 	User      User      `json:"user"`
 	CreatedAt time.Time `json:"created_at"`
+	IssueURL  string    `json:"issue_url"`
+}
+
+// Issue returns the number of the issue or pull request the comment is on,
+// or 0 when its URL does not say.
+func (c Comment) Issue() int {
+	_, n, _ := strings.Cut(c.IssueURL, "/issues/")
+	number, err := strconv.Atoi(n)
+	if err != nil {
+		return 0
+	}
+	return number
 }
 
 type NewIssue struct {
@@ -122,6 +135,12 @@ func (c *Client) labelPath(number int, name string) string {
 
 func (c *Client) Comments(number int) ([]Comment, error) {
 	return list[Comment](c, c.path("issues/%d/comments", number))
+}
+
+// RepoComments lists the comments on every issue and pull request of the
+// repository that were updated at or after since, oldest first.
+func (c *Client) RepoComments(since time.Time) ([]Comment, error) {
+	return list[Comment](c, c.path("issues/comments?since=%s", url.QueryEscape(since.UTC().Format(time.RFC3339))))
 }
 
 func (c *Client) CreateComment(number int, body string) (Comment, error) {

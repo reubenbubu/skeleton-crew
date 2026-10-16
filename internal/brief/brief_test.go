@@ -20,7 +20,7 @@ var duties = map[string][]string{
 	},
 	"pm": {
 		"what is built and why", "technical decision",
-		"crew status", "crew ticket triage", "crew ticket new", "--intake", "--parent",
+		"crew status --as pm", "stale", "crew ticket triage", "crew ticket new", "--intake", "--parent",
 		"crew ticket edit", "crew ticket ready", "crew ticket ack",
 		"- [#<n>-AC<k>]", "observable behaviour", "never renumber", "revised",
 		"sub-issues", "split", "2:drafting", "product.md", "standing preferences",
@@ -29,7 +29,7 @@ var duties = map[string][]string{
 	"dm": {
 		"how", "never wait for", "never write product code", "trivial merge conflicts",
 		"crew dm claim", "--takeover", "confirm", "crew dm release", "--lead", "not-lead", "stage-changed",
-		"conversational", "knowledge-only",
+		"conversational", "knowledge-only", "crew status --as dm", "no Dev or Reviewer of your session",
 		"crew events --wait", "crew events --wait --test", "self-test", "send me any message",
 		"crew ticket next", "log` comment", "collide",
 		"crew ticket start", "--tier", "at-cap", "crew brief dev", "crew brief reviewer", "session's model",

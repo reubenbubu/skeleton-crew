@@ -25,6 +25,7 @@ var ticketCommands = map[string]func([]string, Env) int{
 	"ask":     runTicketAsk,
 	"stuck":   runTicketStuck,
 	"submit":  runTicketSubmit,
+	"next":    runTicketNext,
 }
 
 func runTicket(args []string, env Env) int {
@@ -277,17 +278,23 @@ func runTicketList(args []string, env Env) int {
 			Tickets []ticket.Summary `json:"tickets"`
 		}{tickets})
 	} else {
-		var ls []string
-		for _, t := range tickets {
-			l := fmt.Sprintf("#%d", t.Number)
-			if f := t.Fields.String(); f != "" {
-				l += " " + f
-			}
-			ls = append(ls, l+" · "+t.Title)
-		}
-		err = lines(env.Stdout, ls...)
+		err = lines(env.Stdout, summaryLines(tickets)...)
 	}
 	return finish(env, err, false)
+}
+
+// summaryLines formats tickets one line each, as crew ticket list prints
+// them.
+func summaryLines(tickets []ticket.Summary) []string {
+	var ls []string
+	for _, t := range tickets {
+		l := fmt.Sprintf("#%d", t.Number)
+		if f := t.Fields.String(); f != "" {
+			l += " " + f
+		}
+		ls = append(ls, l+" · "+t.Title)
+	}
+	return ls
 }
 
 func runTicketComment(args []string, env Env) int {

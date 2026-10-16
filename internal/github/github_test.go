@@ -114,6 +114,23 @@ func TestComments(t *testing.T) {
 	}
 }
 
+// #11-AC2
+func TestRepoComments(t *testing.T) {
+	clk := clock.NewFake(clock.Epoch)
+	fake := fakegithub.New("user/project", clk)
+	c := github.New("user/project", fake.Run)
+	must[github.Issue](t)(c.CreateIssue(github.NewIssue{Title: "a"}))
+	must[github.Issue](t)(c.CreateIssue(github.NewIssue{Title: "b"}))
+	must[github.Comment](t)(c.CreateComment(1, "old"))
+	clk.Advance(time.Hour)
+	must[github.Comment](t)(c.CreateComment(2, "first"))
+	must[github.Comment](t)(c.CreateComment(1, "second"))
+	got := must[[]github.Comment](t)(c.RepoComments(clock.Epoch.Add(time.Minute)))
+	if len(got) != 2 || got[0].Body != "first" || got[0].Issue() != 2 || got[1].Body != "second" || got[1].Issue() != 1 {
+		t.Fatalf("comments %+v", got)
+	}
+}
+
 // #3-AC2
 func TestSubIssuesAndDependencies(t *testing.T) {
 	c, _ := setup(t)

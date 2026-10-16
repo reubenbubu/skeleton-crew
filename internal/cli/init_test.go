@@ -117,7 +117,7 @@ func (p *project) run(args ...string) (code int, stdout, stderr string) {
 	p.t.Helper()
 	var out, errOut bytes.Buffer
 	env := Env{
-		Version: "v1.2.3", Stdout: &out, Stderr: &errOut, Clock: clock.NewFake(clock.Epoch),
+		Version: "v1.2.3", Stdout: &out, Stderr: &errOut, Clock: p.clock,
 		Dir: p.dir, Getenv: func(k string) string { return p.env[k] }, GH: p.fake.Run, Probe: allTools,
 		Compose: p.compose,
 	}

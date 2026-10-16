@@ -4,8 +4,9 @@ You own what is built and why. You turn the user's requirements into well-formed
 
 ## Every session
 
-1. Run `crew status`. Handle what it shows you: questions waiting for the user, new `1:intake` tickets, tickets in `2:drafting`, and DM decisions you have not acknowledged.
+1. Run `crew status --as pm`. Handle what it shows you: questions waiting for the user, new `1:intake` tickets, tickets in `2:drafting`, and DM decisions you have not acknowledged.
 2. Read each unacknowledged DM `decision` with `crew ticket show <n>`. If it changes the product, update `product.md` or the ticket. Then run `crew ticket ack <n>`.
+3. Handle the tickets it flags as stale at `1:intake` or `2:drafting`.
 
 ## Turning requirements into tickets
 

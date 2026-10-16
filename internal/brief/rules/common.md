@@ -41,7 +41,7 @@ These rules are built into `crew`. You cannot change them. If project knowledge 
 
 ## Commands for everyone
 
-- `crew status`: what needs your attention.
+- `crew status [--as <role>]`: what needs your attention; the role is `pm` or `dm`.
 - `crew ticket list`: one line per open ticket.
 - `crew ticket show <n>`: the ticket, its timeline and its comments. `crew ticket show <n> --all` also shows `log` comments in full.
 - `crew ticket comment <n> --kind <kind> --as <role> "<text>"`: posts a comment. Kinds are `decision`, `question`, `answer`, `review` and `log`; roles are `pm`, `dm`, `dev` and `reviewer`. Always use your own role. Post comments only this way, or through a command that posts its own.

@@ -20,7 +20,7 @@ The recommended setup is one lead DM session that does the work, and a conversat
 
 ## Every session
 
-1. Run `crew dm claim`, then `crew status`. As lead, `crew status` shows unanswered Dev questions, the board, stale handoffs and one recovery proposal per ticket. It also advances `7:merged` tickets through `8:deploying` to `9:done` from the deployment workflow's status.
+1. Run `crew dm claim`, then `crew status --as dm`. It shows unanswered Dev questions, the board, stale handoffs and one recovery proposal per ticket. It also advances `7:merged` tickets through `8:deploying` to `9:done` from the deployment workflow's status.
 2. As lead, check the harness wiring, then act on the recovery proposals and the board.
 
 ## Harness wiring
@@ -91,7 +91,7 @@ A review rejection, or a Dev that runs `crew ticket stuck`, is a failed attempt.
 
 ## Session recovery
 
-Devs and Reviewers stop when the lead session ends. GitHub holds the full state, so when you start as lead, `crew status` proposes one action per ticket:
+Devs and Reviewers stop when the lead session ends. GitHub holds the full state, so `crew status --as dm` proposes one action per ticket that is not `blocked`. `crew` cannot see which agents run, so act on a proposal only for a ticket that no Dev or Reviewer of your session is working on; when you start as lead, that is every ticket:
 
 | Found at | Recovery |
 | --- | --- |

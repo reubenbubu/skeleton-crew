@@ -170,17 +170,60 @@ $ crew ticket list
 
 ## Status
 
-`crew status` shows each role what needs its attention. The PM and the DM run it at the start of every session.
+`crew status [--as <role>]` shows each role what needs its attention. The role is `pm` or `dm`; without `--as`, it shows only what concerns everyone. The PM runs `crew status --as pm` and the DM `crew status --as dm` at the start of every session.
 
-- **Everyone:** questions waiting for you, from `blocked` tickets and tickets that reached the escalation limit.
-- **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions the PM has not acknowledged with `crew ticket ack`.
-- **Lead DM:** unanswered Dev questions, the board, stale handoffs and recovery proposals. It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
+- **Everyone:** questions waiting for you. Each `blocked` ticket is listed with the time it was blocked and the first line of its latest `question` comment that is not a Dev's. A ticket that reaches the escalation limit is blocked with such a question.
+- **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions the PM has not acknowledged. `crew ticket ack <n>` posts a `log` comment `ack` as `pm`; a `decision` comment by `dm` is acknowledged once such a comment follows it on its ticket.
+- **Lead DM:** unanswered Dev questions, the board, stale handoffs and recovery proposals. A Dev question is unanswered while no `answer` comment follows it. The board is every open ticket past `2:drafting`. Recovery proposals are described in [Session recovery](#session-recovery). It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
+- **Stale handoffs:** each role sees the stale tickets at the stages it owns, the PM `1:intake` and `2:drafting` and the DM the rest. A ticket is stale when it has been at its stage longer than the time below, counted from the last time it reached the stage. A `blocked` ticket is never stale, because it waits for you.
 
-Open issues without a stage label, such as issues you create on GitHub, are labelled `1:intake` the first time `crew status` sees them.
+| Stage | Stale after | Flag |
+| --- | --- | --- |
+| `1:intake` | 1 day | `not triaged` |
+| `2:drafting` | 7 days | `not ready` |
+| `3:eligible` | 1 day | `not started` |
+| `4:in-progress` | 4 hours | `not submitted` |
+| `4:waiting-review` | 1 hour | `no reviewer` |
+| `4:review-rejected` | 1 hour | `no new attempt` |
+| `5:review-approved` | 1 hour | `not merged` |
+| `6:pending-merge` | 1 hour | `not merged` |
+| `7:merged` | 1 hour | `no deployment` |
+| `8:deploying` | 1 hour | `deployment not finished` |
+
+`crew status` reads the comments of the last 30 days, in one listing for the whole repository, so a question or decision older than that no longer shows.
+
+Every run of `crew status`, whatever the role, also keeps the tickets in order, and reports what it changed:
+
+- Open issues without a stage label, such as issues you create on GitHub, are labelled `1:intake` the first time `crew status` sees them, with `priority:medium` and `kind:feat` when they have no priority or kind. An issue with sub-issues is a parent and keeps no stage.
+- A parent whose sub-issues are all closed is closed, as not planned when every sub-issue was, and as completed otherwise.
+
+The output has one section per part, each opened by a line `=== <name>`, and leaves out the empty ones. With nothing to show, it prints `nothing needs attention`.
+
+```
+$ crew status --as dm
+=== changes
+#21 labelled stage=1:intake priority=medium kind=feat
+#7 closed: all sub-issues closed
+=== waiting for the user
+#14 blocked since 2026-10-15T10:00Z: Which payment provider should the checkout use?
+=== dev questions
+#12 2026-10-15T08:52Z: Should expired links show an error page or redirect?
+=== board
+#12 stage=4:in-progress priority=high kind=feat tier=2 · Login with email
+#13 stage=4:waiting-review priority=medium kind=fix tier=1 · Expired links crash
+#14 stage=3:eligible priority=high kind=feat blocked · Checkout
+=== stale
+#13 4:waiting-review since 2026-10-15T09:12Z: no reviewer
+=== recovery
+#12 4:in-progress: answer the Dev question, then start a Dev at tier 2
+#13 4:waiting-review: start a Reviewer
+```
+
+The PM's sections are `changes`, `waiting for the user`, `intake`, `drafting`, `decisions` and `stale`. A decision line is like a question line: the ticket, the comment's time and its first line.
 
 ## Selecting work
 
-`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done. Dependencies use GitHub's own issue dependencies ("blocked by"), which `crew ticket edit` sets. They are sorted by priority, then by age.
+`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done, one line each as `crew ticket list` prints them. Dependencies use GitHub's own issue dependencies ("blocked by"), which `crew ticket edit` sets. A dependency is done when its issue is closed as completed; a cancelled dependency keeps the ticket out of the list until the dependency is removed. They are sorted by priority, from `critical` to `low`, then by age, oldest first.
 
 - By default the DM takes the first one.
 - The DM may skip down the list when the top ticket would collide with work in flight, for example two tickets that both change the same module. It records the reason as a `log` comment.
@@ -449,7 +492,7 @@ The recommended setup is one lead DM session that does the work, and a conversat
 
 ## Session recovery
 
-Devs and Reviewers run inside the lead DM's harness session and stop when it ends. Every commit is pushed immediately and every stage is a label, so GitHub always holds the full state. When a lead DM starts, `crew status` proposes one action per ticket:
+Devs and Reviewers run inside the lead DM's harness session and stop when it ends. Every commit is pushed immediately and every stage is a label, so GitHub always holds the full state. `crew status --as dm` proposes one action per ticket that is not `blocked`. `crew` cannot see which agents are running, so the lead DM acts on a proposal only for a ticket that no Dev or Reviewer of its own session is working on, which at the start of a session is every ticket:
 
 | Found at | Recovery |
 | --- | --- |
@@ -600,7 +643,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew ticket new "<title>" [--priority <p>] [--kind <k>] [--intake] [--parent <n>]` | Creates a ticket at `2:drafting`, or at `1:intake` with `--intake`; with `--parent`, as a child of ticket `n` |
 | `crew ticket triage <n>` | `1:intake` to `2:drafting` |
 | `crew ticket edit <n>` | Changes body, priority, kind, testing level or dependencies; no stage change. Marks a criterion whose text it changes as `(revised <time>)` |
-| `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM |
+| `crew ticket ack <n>` | Marks the DM decisions on a ticket as seen by the PM, with a `log` comment `ack` |
 | `crew ticket ready <n>` | `2:drafting` to `3:eligible`; refused without numbered acceptance criteria |
 
 ### Lead DM
@@ -645,7 +688,7 @@ Run inside the ticket's worktree.
 
 | Command | Does |
 | --- | --- |
-| `crew status` | Shows what needs the caller's attention; see [Status](#status) |
+| `crew status [--as <role>]` | Shows what needs the caller's attention; see [Status](#status) |
 | `crew ticket list` | One line per ticket |
 | `crew ticket show <n> [--all]` | The terse ticket view |
 | `crew ticket comment <n> --kind <kind> --as <role> "<text>"` | Posts a tagged comment |

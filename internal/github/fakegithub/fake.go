@@ -133,6 +133,7 @@ func New(repo string, c clock.Clock) *GitHub {
 		"POST " + p + "labels":                             g.createLabel,
 		"POST " + p + "issues/{n}/labels":                  g.addLabels,
 		"DELETE " + p + "issues/{n}/labels/{name}":         g.removeLabel,
+		"GET " + p + "issues/comments":                     g.listRepoComments,
 		"GET " + p + "issues/{n}/comments":                 g.listComments,
 		"POST " + p + "issues/{n}/comments":                g.createComment,
 		"GET " + p + "issues/{n}/events":                   g.listEvents,
@@ -655,6 +656,40 @@ func (g *GitHub) listComments(w http.ResponseWriter, r *http.Request) {
 	out := []any{}
 	for _, c := range g.comments[i.number] {
 		out = append(out, g.commentJSON(i.number, c))
+	}
+	reply(w, http.StatusOK, page(r, out))
+}
+
+// listRepoComments lists the comments on every issue and pull request,
+// oldest first, leaving out those older than the since parameter.
+func (g *GitHub) listRepoComments(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	var since time.Time
+	if q := r.URL.Query().Get("since"); q != "" {
+		t, err := time.Parse(time.RFC3339, q)
+		if err != nil {
+			invalid(w, "IssueComment", "since", "invalid")
+			return
+		}
+		since = t
+	}
+	type numbered struct {
+		number int
+		c      *comment
+	}
+	var all []numbered
+	for n, cs := range g.comments {
+		for _, c := range cs {
+			if !c.created.Before(since) {
+				all = append(all, numbered{n, c})
+			}
+		}
+	}
+	slices.SortFunc(all, func(a, b numbered) int { return int(a.c.id - b.c.id) })
+	out := []any{}
+	for _, a := range all {
+		out = append(out, g.commentJSON(a.number, a.c))
 	}
 	reply(w, http.StatusOK, page(r, out))
 }
