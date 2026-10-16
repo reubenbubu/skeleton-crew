@@ -29,6 +29,8 @@ type Env struct {
 	Compose        compose.Runner          // runs the container engine's compose
 	HealthPoll     time.Duration           // how often the gate tries health
 	HealthTimeout  time.Duration           // how long the gate tries health
+	EventsPoll     time.Duration           // how often crew events --wait looks
+	EventsTest     time.Duration           // how long crew events --wait --test waits
 }
 
 // Run executes crew with args, which exclude the program name, and returns

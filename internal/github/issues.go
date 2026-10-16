@@ -20,6 +20,7 @@ type Issue struct {
 	Labels      []Label   `json:"labels"`
 	User        User      `json:"user"`
 	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	PullRequest *struct{} `json:"pull_request"` // set when the issue is a pull request
 }
 

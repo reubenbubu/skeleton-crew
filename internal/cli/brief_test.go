@@ -48,7 +48,7 @@ func TestBriefPrintsTheRoleRules(t *testing.T) {
 	p := newBriefProject(t)
 	fields := map[string]string{
 		"pm":       "testing=thorough",
-		"dm":       "testing=thorough",
+		"dm":       "testing=thorough harness=unknown",
 		"dev":      "testing=thorough",
 		"reviewer": "tier=2 model=sonnet effort=medium testing=thorough",
 	}
@@ -144,7 +144,7 @@ func TestBriefNamesTheTestingLevel(t *testing.T) {
 
 func TestBriefMissingKnowledge(t *testing.T) {
 	p := newDevProject(t)
-	want := "brief dm\ntesting=standard\n=== rules\n" + rules(t, "dm") +
+	want := "brief dm\ntesting=standard harness=unknown\n=== rules\n" + rules(t, "dm") +
 		"=== .crew/docs/product.md: missing\n=== .crew/docs/architecture.md: missing\n=== .crew/docs/conventions.md: missing\n=== .crew/docs/adr\n"
 	if out := p.ok("brief", "dm"); out != want {
 		t.Fatalf("got\n%s\nwant\n%s", out, want)

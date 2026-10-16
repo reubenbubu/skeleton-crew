@@ -34,6 +34,7 @@ type Fake struct {
 	mu      sync.Mutex
 	now     time.Time
 	waiters []waiter
+	changed *sync.Cond // signalled when a timer is added
 }
 
 type waiter struct {
@@ -58,6 +59,9 @@ func (f *Fake) After(d time.Duration) <-chan time.Time {
 		return ch
 	}
 	f.waiters = append(f.waiters, waiter{at: f.now.Add(d), ch: ch})
+	if f.changed != nil {
+		f.changed.Broadcast()
+	}
 	return ch
 }
 
@@ -75,4 +79,17 @@ func (f *Fake) Advance(d time.Duration) {
 		w.ch <- f.now
 	}
 	f.waiters = pending
+}
+
+// BlockUntil returns once at least n timers are waiting, so a test can
+// advance the clock knowing that a polling loop is asleep.
+func (f *Fake) BlockUntil(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.changed == nil {
+		f.changed = sync.NewCond(&f.mu)
+	}
+	for len(f.waiters) < n {
+		f.changed.Wait()
+	}
 }

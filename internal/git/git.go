@@ -239,6 +239,17 @@ func (r *Repo) CommitOnly(msg string, paths []string) (string, error) {
 	return git(r.Dir, "rev-parse", "HEAD")
 }
 
+// ResetTo moves the current branch back to sha and puts the index of paths
+// back as sha has them. The working tree, and the index of other paths,
+// stay as they are.
+func (r *Repo) ResetTo(sha string, paths []string) error {
+	if _, err := git(r.Dir, "reset", "--quiet", "--soft", sha); err != nil {
+		return err
+	}
+	_, err := git(r.Dir, append([]string{"reset", "--quiet", sha, "--"}, paths...)...)
+	return err
+}
+
 // LocalMain returns the commit local main points to, or "" when main has no
 // commits yet.
 func (r *Repo) LocalMain() (string, error) {

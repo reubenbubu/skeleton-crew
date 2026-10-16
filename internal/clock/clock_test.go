@@ -37,3 +37,22 @@ func TestRealAfterSendsUTC(t *testing.T) {
 		t.Fatalf("After sent %v, want UTC", got.Location())
 	}
 }
+
+func TestFakeBlockUntilWaitsForTimers(t *testing.T) {
+	c := NewFake(Epoch)
+	done := make(chan struct{})
+	go func() {
+		c.BlockUntil(2)
+		close(done)
+	}()
+	c.After(time.Second)
+	select {
+	case <-done:
+		t.Fatal("returned with one timer")
+	default:
+	}
+	c.After(time.Second)
+	<-done
+	c.Advance(time.Second)
+	c.BlockUntil(0)
+}

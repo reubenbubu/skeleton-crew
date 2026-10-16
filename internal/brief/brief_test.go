@@ -31,6 +31,7 @@ var duties = map[string][]string{
 		"crew dm claim", "--takeover", "confirm", "crew dm release", "--lead", "not-lead", "stage-changed",
 		"conversational", "knowledge-only", "crew status --as dm", "no Dev or Reviewer of your session",
 		"crew events --wait", "crew events --wait --test", "self-test", "send me any message",
+		"crew events --lead", "harness=", "wiring=none", "crew dm wiring", "--own", "--file", "only after your previous wait has exited",
 		"crew ticket next", "log` comment", "collide",
 		"crew ticket start", "--tier", "at-cap", "crew brief dev", "crew brief reviewer", "session's model",
 		"crew ticket ask", "answer", "same rank",

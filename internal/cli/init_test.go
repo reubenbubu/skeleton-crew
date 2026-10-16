@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/clock"
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
@@ -119,7 +120,7 @@ func (p *project) run(args ...string) (code int, stdout, stderr string) {
 	env := Env{
 		Version: "v1.2.3", Stdout: &out, Stderr: &errOut, Clock: p.clock,
 		Dir: p.dir, Getenv: func(k string) string { return p.env[k] }, GH: p.fake.Run, Probe: allTools,
-		Compose: p.compose,
+		Compose: p.compose, EventsPoll: poll, EventsTest: 5 * time.Second,
 	}
 	code = Run(args, env)
 	return code, out.String(), errOut.String()
@@ -213,7 +214,7 @@ func TestInitNewProject(t *testing.T) {
 		t.Errorf("crew.toml:\n%s", got)
 	}
 	ignore := p.read(".gitignore")
-	for _, line := range []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock*", "__pycache__/"} {
+	for _, line := range []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock*", ".crew/events.*", "__pycache__/"} {
 		if !slices.Contains(strings.Split(ignore, "\n"), line) {
 			t.Errorf(".gitignore lacks %s:\n%s", line, ignore)
 		}
@@ -323,7 +324,7 @@ func TestInitAppendsToExistingGitignore(t *testing.T) {
 	p.git("commit", "-q", "-m", "ignore")
 	p.git("push", "-q", "origin", "main")
 	p.mustInit("--profile", "python")
-	if got := p.read(".gitignore"); got != "dist/\n.crew/logs/\n.crew/worktrees/\n.crew/lead.lock*\n" {
+	if got := p.read(".gitignore"); got != "dist/\n.crew/logs/\n.crew/worktrees/\n.crew/lead.lock*\n.crew/events.*\n" {
 		t.Errorf(".gitignore:\n%s", got)
 	}
 }

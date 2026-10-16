@@ -35,5 +35,7 @@ func main() {
 
 		HealthPoll:    2 * time.Second,
 		HealthTimeout: 2 * time.Minute,
+		EventsPoll:    30 * time.Second,
+		EventsTest:    5 * time.Second,
 	}))
 }

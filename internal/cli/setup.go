@@ -25,6 +25,7 @@ var commands = map[string]func([]string, Env) int{
 	"brief":  runBrief,
 	"merge":  runMerge,
 	"status": runStatus,
+	"events": runEvents,
 }
 
 // usageError is a problem with the command line: exit 2.

@@ -30,15 +30,80 @@ type Config struct {
 	TopAttempts int
 	Testing     string
 	Devs        int
+	Harnesses   map[string]Harness // by harness name
 }
 
+// Harness records how the lead DM is woken in one harness: Wiring is
+// "wait" for crew events --wait, or "own" for wiring the lead DM wrote,
+// which Start says how to use and which lives in Files.
+type Harness struct {
+	Wiring, Start string
+	Files         []string
+}
+
+// Wirings are the kinds of harness wiring.
+var Wirings = []string{"wait", "own"}
+
+// Record returns the configuration b with the table of harness name, if
+// any, replaced by one for h at the end.
+func Record(b []byte, name string, h Harness) []byte {
+	var kept, held []string
+	in := false
+	for _, line := range strings.SplitAfter(string(b), "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, "["):
+			m := header.FindStringSubmatch(t)
+			wasIn := in
+			in = m != nil && m[1] == "harness."+name
+			// Comments right above a table belong to it, not to the
+			// table being removed.
+			if wasIn && !in {
+				for len(held) > 0 && strings.TrimSpace(held[0]) == "" {
+					held = held[1:]
+				}
+				kept = append(kept, held...)
+			}
+			held = nil
+		case in && (t == "" || t[0] == '#'):
+			held = append(held, line)
+			continue
+		case in:
+			held = nil
+		}
+		if !in {
+			kept = append(kept, line)
+		}
+	}
+	out := strings.TrimRight(strings.Join(kept, ""), "\n") + "\n\n"
+	out += fmt.Sprintf("[harness.%s]\nwiring = %q\n", name, h.Wiring)
+	if h.Start != "" {
+		out += fmt.Sprintf("start = %q\n", h.Start)
+	}
+	if len(h.Files) > 0 {
+		quoted := make([]string, len(h.Files))
+		for i, f := range h.Files {
+			quoted[i] = strconv.Quote(f)
+		}
+		out += "files = [" + strings.Join(quoted, ", ") + "]\n"
+	}
+	return []byte(out)
+}
+
+var header = regexp.MustCompile(`^\[([^\]]*)\]\s*(?:#.*)?$`)
+
+// HarnessName is the pattern of a harness's name, a bare key.
+const HarnessName = `[A-Za-z0-9_-]+`
+
 var (
-	tierTable = regexp.MustCompile(`^tiers\.([1-9][0-9]*)$`)
-	tierKey   = regexp.MustCompile(`^tiers\.([1-9][0-9]*)\.(name|model|effort)$`)
-	tables    = []string{"tiers", "models", "escalation", "testing", "parallel"}
-	counts    = []string{"models.reviewer", "models.max_tier", "escalation.top_attempts", "parallel.devs"}
-	efforts   = []string{"low", "medium", "high", "max"}
-	Levels    = []string{"minimal", "standard", "thorough"}
+	tierTable    = regexp.MustCompile(`^tiers\.([1-9][0-9]*)$`)
+	tierKey      = regexp.MustCompile(`^tiers\.([1-9][0-9]*)\.(name|model|effort)$`)
+	harnessTable = regexp.MustCompile(`^harness\.(` + HarnessName + `)$`)
+	harnessKey   = regexp.MustCompile(`^harness\.(` + HarnessName + `)\.(wiring|start|files)$`)
+	tables       = []string{"tiers", "models", "escalation", "testing", "parallel", "harness"}
+	counts       = []string{"models.reviewer", "models.max_tier", "escalation.top_attempts", "parallel.devs"}
+	efforts      = []string{"low", "medium", "high", "max"}
+	Levels       = []string{"minimal", "standard", "thorough"}
 )
 
 // Parse reads the configuration file called name, with contents b, and
@@ -69,6 +134,13 @@ func Parse(name string, b []byte) (Config, error) {
 	slices.SortFunc(items, func(a, b item) int { return cmp.Compare(a.line, b.line) })
 
 	c := Config{TopAttempts: 2, Testing: "standard", Devs: 3}
+	harnessLines := map[string]int{}
+	harness := func(name string) Harness {
+		if c.Harnesses == nil {
+			c.Harnesses = map[string]Harness{}
+		}
+		return c.Harnesses[name]
+	}
 	tiers := map[int]*Tier{}
 	tier := func(rank string) *Tier {
 		n, _ := strconv.Atoi(rank)
@@ -81,6 +153,10 @@ func Parse(name string, b []byte) (Config, error) {
 		if it.table {
 			if m := tierTable.FindStringSubmatch(it.key); m != nil && validRank(m[1]) {
 				tier(m[1])
+			} else if m := harnessTable.FindStringSubmatch(it.key); m != nil {
+				harnessLines[m[1]] = it.line
+				h := harness(m[1])
+				c.Harnesses[m[1]] = h
 			} else if !slices.Contains(tables, it.key) {
 				return fail(it.line, "unknown table %s", it.key)
 			}
@@ -101,6 +177,25 @@ func Parse(name string, b []byte) (Config, error) {
 			return s, err
 		}
 		var err error
+		if m := harnessKey.FindStringSubmatch(it.key); m != nil {
+			h := harness(m[1])
+			switch m[2] {
+			case "wiring":
+				h.Wiring, err = oneOf(Wirings)
+			case "start":
+				h.Start, err = str()
+			case "files":
+				if v.Kind != toml.Strings {
+					return fail(it.line, "%s must be an array of strings", it.key)
+				}
+				h.Files = v.Strs
+			}
+			if err != nil {
+				return Config{}, err
+			}
+			c.Harnesses[m[1]] = h
+			continue
+		}
 		switch m := tierKey.FindStringSubmatch(it.key); {
 		case it.key == "profile":
 			c.Profile, err = str()
@@ -152,6 +247,19 @@ func Parse(name string, b []byte) (Config, error) {
 		if t.Effort == "" {
 			key := fmt.Sprintf("tiers.%d", t.Rank)
 			return fail(doc.TableLines[key], "%s.effort is missing", key)
+		}
+	}
+	names := make([]string, 0, len(c.Harnesses))
+	for n := range c.Harnesses {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	for _, n := range names {
+		switch h := c.Harnesses[n]; {
+		case h.Wiring == "":
+			return fail(harnessLines[n], "harness.%s.wiring is missing", n)
+		case h.Wiring == "own" && h.Start == "":
+			return fail(harnessLines[n], "harness.%s.start is missing", n)
 		}
 	}
 	highest := c.Tiers[len(c.Tiers)-1].Rank

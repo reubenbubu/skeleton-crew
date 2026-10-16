@@ -10,7 +10,7 @@ Several DM sessions may be open at once, but only one, the lead, acts on work.
 
 - Start every session with `crew dm claim`. If no one holds the lead, you get it and its token, in a line such as `lead 3f9a0c1e5b7d42a8961e0f3c2b4d6a81 claimed 2026-10-16T09:12Z`. Keep the token: every lead-only command takes it as `--lead <token>`.
 - If the claim is refused because another session holds the lead, you are a conversational DM. Run `crew dm claim --takeover` only when the user confirms it, for example when the old lead session is gone. A lead that has lost its own token takes over from itself the same way. Never decide on your own that another session is dead. A takeover makes the old token stop working at once, so the old lead's next lead-only command gets `not-lead`.
-- Lead-only commands: `crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge` and `crew dm release`. When one is refused with `not-lead`, another session has taken the lead: continue as a conversational DM; no work is lost, because all state is on GitHub. A refusal `not-lead: no lead; run crew dm claim` means no one holds the lead; run `crew dm claim` again.
+- Lead-only commands: `crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge`, `crew events`, `crew dm wiring` and `crew dm release`. When one is refused with `not-lead`, another session has taken the lead: continue as a conversational DM; no work is lost, because all state is on GitHub. A refusal `not-lead: no lead; run crew dm claim` means no one holds the lead; run `crew dm claim` again.
 - A command refused with `stage-changed` lost a race: another writer moved the ticket first. Read the ticket again and act on its new stage.
 - When the lead session ends normally, run `crew dm release --lead <token>`.
 
@@ -27,17 +27,19 @@ The recommended setup is one lead DM session that does the work, and a conversat
 
 Without wiring, you act only when the user prompts you. With it, you wake when something happens.
 
-- `crew events` reports what changed since the previous call. `crew events --wait` blocks until something is unread, then exits without printing anything or marking anything read. Each new `--wait` replaces the previous one.
-- If your harness wakes you when a background command exits: start `crew events --wait` in the background and end your turn. When it exits, run `crew events`, do the work, and start `crew events --wait` again.
+- `crew events --lead <token>` reports what changed since its previous call, one line per event, such as `2026-10-16T09:12Z #12 reached 4:waiting-review`, and marks it read. Events are a ticket becoming eligible, a Dev or Reviewer finishing, a Dev question, a question answered or a human comment, and a handoff going stale. Your own work is no event.
+- `crew events --wait --lead <token>` blocks until something is unread, then exits without printing anything or marking anything read. Each new `--wait` replaces the previous one, which exits quietly.
+- If your harness wakes you when a background command exits: start `crew events --wait --lead <token>` in the background and end your turn. When it exits, run `crew events --lead <token>`, do the work, and start a new wait. Start a wait only after your previous wait has exited, and only as lead. If `crew events` is refused with `not-lead`, start no wait.
 - Every time you start as lead, check your wiring:
-  1. Identify the harness you run in.
-  2. Look it up in `.crew/crew.toml`. If it is recorded as supporting `crew events --wait`, use that. If it is recorded with its own wiring, use that wiring.
-  3. If it is not recorded, run the self-test. Tell the user: "If I have not continued within a minute, send me any message." Start `crew events --wait --test` in the background and end your turn. It exits after a few seconds as if an event had arrived.
-     - If the harness woke you, record that it supports `crew events --wait`.
-     - If you were not woken, the user's message shows that the test event fired without waking you. Write your own wiring with the harness's features, show it to the user, and install it only when the user confirms. Then record it.
+  1. The second line of `crew brief dm` names the harness you run in and its record, such as `harness=claude-code wiring=wait`. If it says `harness=unknown`, identify the harness yourself and look it up in `.crew/crew.toml`.
+  2. With `wiring=wait`, use `crew events --wait`. With `wiring=own`, use the wiring that `[harness.<name>]` in `.crew/crew.toml` records: its `start` says how.
+  3. With `wiring=none`, run the self-test. Tell the user: "If I have not continued within a minute, send me any message." Start `crew events --wait --test --lead <token>` in the background and end your turn. It exits after a few seconds as if an event had arrived.
+     - If the harness woke you, run `crew dm wiring <harness> --wait --lead <token>`.
+     - If you were not woken, the user's message shows that the test event fired without waking you. Write your own wiring with the harness's features, show it to the user, and install it only when the user confirms. Then run `crew dm wiring <harness> --own "<how to start it>" --file <path>... --lead <token>`, naming every file of the wiring.
+  `crew dm wiring` records the result in `.crew/crew.toml` and commits it, with the wiring's files, straight to `main`.
 - Wiring must be event-driven, so that you wake only when something happened and your context grows only with work done. It must live inside the harness, with no cron jobs, system services or other processes outside it. It must stop when the session closes or when the user says so, and never block the user from talking to a DM.
-- Wiring lives where the harness requires it, such as `.claude/` or `.opencode/`, and every harness's wiring is recorded in `.crew/crew.toml`.
-- A record can go stale, for example after a harness update. When the user prompts you and you find events that should have woken you, run the self-test again and update the record.
+- Wiring lives where the harness requires it, such as `.claude/` or `.opencode/`.
+- A record can go stale, for example after a harness update. When the user prompts you and `crew events` shows events that should have woken you, run the self-test again and record the result.
 
 ## Selecting work
 

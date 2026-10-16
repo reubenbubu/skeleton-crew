@@ -415,3 +415,32 @@ func TestTakeLabel(t *testing.T) {
 		t.Fatalf("client unusable after a label that was gone: %v", err)
 	}
 }
+
+// An issue's updated_at moves with its labels, comments and edits.
+func TestIssueUpdatedAt(t *testing.T) {
+	clk := clock.NewFake(clock.Epoch)
+	fake := fakegithub.New("user/project", clk)
+	c := github.New("user/project", fake.Run)
+	must[github.Issue](t)(c.CreateIssue(github.NewIssue{Title: "t"}))
+	updated := func(want time.Duration) {
+		t.Helper()
+		i := must[github.Issue](t)(c.Issue(1))
+		if w := clock.Epoch.Add(want); !i.UpdatedAt.Equal(w) {
+			t.Fatalf("updated_at %v, want %v", i.UpdatedAt, w)
+		}
+	}
+	updated(0)
+	clk.Advance(time.Minute)
+	must[[]github.Label](t)(c.AddLabels(1, "blocked"))
+	updated(time.Minute)
+	clk.Advance(time.Minute)
+	must[[]github.Label](t)(c.RemoveLabel(1, "blocked"))
+	updated(2 * time.Minute)
+	clk.Advance(time.Minute)
+	must[github.Comment](t)(c.CreateComment(1, "hi"))
+	updated(3 * time.Minute)
+	clk.Advance(time.Minute)
+	title := "u"
+	must[github.Issue](t)(c.EditIssue(1, github.IssueEdit{Title: &title}))
+	updated(4 * time.Minute)
+}

@@ -128,3 +128,60 @@ func TestDetectHarness(t *testing.T) {
 		}
 	}
 }
+
+// #13-AC5
+func TestHarnessRecords(t *testing.T) {
+	src := string(Template("python", "claude-code")) +
+		"\n[harness.claude-code]\nwiring = \"wait\"\n" +
+		"\n[harness.opencode]\nwiring = \"own\"\nstart = \"Load the \\\"crew-wake\\\" plugin.\"\nfiles = [\".opencode/plugins/crew-wake.ts\"]\n"
+	got, err := Parse(Path, []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]Harness{
+		"claude-code": {Wiring: "wait"},
+		"opencode":    {Wiring: "own", Start: `Load the "crew-wake" plugin.`, Files: []string{".opencode/plugins/crew-wake.ts"}},
+	}
+	if !reflect.DeepEqual(got.Harnesses, want) {
+		t.Errorf("got  %+v\nwant %+v", got.Harnesses, want)
+	}
+
+	base := "profile = \"python\"\n[tiers.1]\neffort = \"low\"\n"
+	for _, c := range []struct{ src, want string }{
+		{base + "[harness.x]\nwiring = \"poll\"\n", "f:5: harness.x.wiring must be wait or own"},
+		{base + "[harness.x]\nstart = \"go\"\n", "f:4: harness.x.wiring is missing"},
+		{base + "[harness.x]\nwiring = \"own\"\n", "f:4: harness.x.start is missing"},
+		{base + "[harness.x]\nwiring = \"wait\"\nfiles = \"a\"\n", "f:6: harness.x.files must be an array of strings"},
+		{base + "[harness.x]\nwiring = \"wait\"\nbogus = 1\n", "f:6: unknown key harness.x.bogus"},
+		{base + "[harness.x.y]\n", "f:4: unknown table harness.x.y"},
+	} {
+		_, err := Parse("f", []byte(c.src))
+		if err == nil || err.Error() != c.want {
+			t.Errorf("%q:\ngot  %v\nwant %s", c.src, err, c.want)
+		}
+	}
+}
+
+// #13-AC5
+func TestRecordReplacesOnlyTheHarnessTable(t *testing.T) {
+	src := "profile = \"python\"\n[tiers.1]\neffort = \"low\"\n\n[harness.opencode]\nwiring = \"own\"\nstart = \"Load it.\"\nfiles = [\"a.ts\"]\n\n[harness.claude-code]\nwiring = \"wait\"\n"
+	got := string(Record([]byte(src), "opencode", Harness{Wiring: "wait"}))
+	want := "profile = \"python\"\n[tiers.1]\neffort = \"low\"\n\n[harness.claude-code]\nwiring = \"wait\"\n\n[harness.opencode]\nwiring = \"wait\"\n"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	// Comments above the next table stay with it.
+	src = "profile = \"python\"\n\n[harness.x]\nwiring = \"wait\"\n\n# escalation\n[escalation]\ntop_attempts = 2\n"
+	want = "profile = \"python\"\n\n# escalation\n[escalation]\ntop_attempts = 2\n\n[harness.x]\nwiring = \"wait\"\n"
+	if got := string(Record([]byte(src), "x", Harness{Wiring: "wait"})); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	got = string(Record([]byte("profile = \"python\""), "x", Harness{Wiring: "own", Start: "Say \"go\".", Files: []string{"a", "b"}}))
+	want = "profile = \"python\"\n\n[harness.x]\nwiring = \"own\"\nstart = \"Say \\\"go\\\".\"\nfiles = [\"a\", \"b\"]\n"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	if _, err := Parse("f", []byte(got)); err == nil || !strings.Contains(err.Error(), "no tiers") {
+		t.Errorf("record does not parse: %v", err)
+	}
+}

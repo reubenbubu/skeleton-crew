@@ -14,6 +14,7 @@ import (
 var dmCommands = map[string]func([]string, Env) int{
 	"claim":   runClaim,
 	"release": runRelease,
+	"wiring":  runWiring,
 }
 
 func runDM(args []string, env Env) int {

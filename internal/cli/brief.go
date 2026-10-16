@@ -34,6 +34,8 @@ type briefing struct {
 	Model   string       `json:"model,omitempty"`
 	Effort  string       `json:"effort,omitempty"`
 	Testing string       `json:"testing"`
+	Harness string       `json:"harness,omitempty"` // for the DM: the harness it runs in, or unknown
+	Wiring  string       `json:"wiring,omitempty"`  // for the DM: the harness's recorded wiring, or none
 	Rules   string       `json:"rules"`
 	View    *ticket.View `json:"view,omitempty"`
 	Docs    []doc        `json:"docs"`
@@ -67,6 +69,14 @@ func runBrief(args []string, env Env) int {
 		return finish(env, err, false)
 	}
 	b.Testing = cfg.Testing
+	if b.Role == "dm" {
+		b.Harness = config.DetectHarness(env.Getenv)
+		if !harnessName.MatchString(b.Harness) {
+			b.Harness = "unknown"
+		} else if b.Wiring = cfg.Harnesses[b.Harness].Wiring; b.Wiring == "" {
+			b.Wiring = "none"
+		}
+	}
 	if b.Ticket != 0 {
 		if err := b.fromTicket(env, cfg); err != nil {
 			return finish(env, err, false)
@@ -186,6 +196,12 @@ func (b *briefing) String() string {
 		fields = append(fields, "effort="+b.Effort)
 	}
 	fields = append(fields, "testing="+b.Testing)
+	if b.Harness != "" {
+		fields = append(fields, "harness="+b.Harness)
+	}
+	if b.Wiring != "" {
+		fields = append(fields, "wiring="+b.Wiring)
+	}
 	s.WriteString(strings.Join(fields, " ") + "\n")
 	s.WriteString("=== rules\n" + withNewline(b.Rules))
 	if b.View != nil {

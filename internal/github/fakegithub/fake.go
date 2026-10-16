@@ -64,7 +64,7 @@ type issue struct {
 	title, body        string
 	state, stateReason string
 	labels             []string
-	created            time.Time
+	created, updated   time.Time
 	pull               *pull
 }
 
@@ -385,6 +385,7 @@ func (g *GitHub) removeIssueLabel(i *issue, name string) bool {
 
 func (g *GitHub) record(i *issue, kind, label string) {
 	g.events[i.number] = append(g.events[i.number], &event{id: g.id(), event: kind, label: label, created: g.clock.Now()})
+	i.updated = g.clock.Now()
 }
 
 func (g *GitHub) label(name string) *label {
@@ -424,7 +425,7 @@ func (g *GitHub) issueJSON(i *issue) map[string]any {
 		"url": g.url("issues/%d", i.number), "title": i.title, "body": nullable(i.body),
 		"state": i.state, "state_reason": nullable(i.stateReason), "labels": g.labelsJSON(i.labels),
 		"user": user(), "comments": len(g.comments[i.number]), "created_at": ts(i.created),
-		"reactions": map[string]any{"total_count": 0},
+		"updated_at": ts(i.updated), "reactions": map[string]any{"total_count": 0},
 	}
 	if i.pull != nil {
 		m["pull_request"] = map[string]any{"url": g.url("pulls/%d", i.number)}
@@ -523,7 +524,7 @@ func (g *GitHub) createIssue(w http.ResponseWriter, r *http.Request) {
 		invalid(w, "Issue", "title", "missing_field")
 		return
 	}
-	i := &issue{id: g.id(), number: len(g.issues) + 1, title: in.Title, body: in.Body, state: "open", created: g.clock.Now()}
+	i := &issue{id: g.id(), number: len(g.issues) + 1, title: in.Title, body: in.Body, state: "open", created: g.clock.Now(), updated: g.clock.Now()}
 	g.issues = append(g.issues, i)
 	g.addIssueLabels(i, in.Labels)
 	reply(w, http.StatusCreated, g.issueJSON(i))
@@ -575,6 +576,7 @@ func (g *GitHub) editIssue(w http.ResponseWriter, r *http.Request) {
 	if in.StateReason != "" {
 		i.stateReason = in.StateReason
 	}
+	i.updated = g.clock.Now()
 	reply(w, http.StatusOK, g.issueJSON(i))
 }
 
@@ -713,6 +715,7 @@ func (g *GitHub) createComment(w http.ResponseWriter, r *http.Request) {
 	}
 	c := &comment{id: g.id(), body: in.Body, created: g.clock.Now()}
 	g.comments[i.number] = append(g.comments[i.number], c)
+	i.updated = c.created
 	reply(w, http.StatusCreated, g.commentJSON(i.number, c))
 }
 
@@ -901,7 +904,7 @@ func (g *GitHub) createPull(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	i := &issue{id: g.id(), number: len(g.issues) + 1, title: in.Title, body: in.Body, state: "open", created: g.clock.Now(),
+	i := &issue{id: g.id(), number: len(g.issues) + 1, title: in.Title, body: in.Body, state: "open", created: g.clock.Now(), updated: g.clock.Now(),
 		pull: &pull{head: in.Head, base: in.Base, draft: in.Draft}}
 	g.issues = append(g.issues, i)
 	reply(w, http.StatusCreated, g.pullJSON(i))

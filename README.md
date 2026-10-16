@@ -50,7 +50,7 @@ crew init --profile <name> [--harness <name>] [--repo <owner>/<name>] [--public]
 
 1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock*` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*` and `.crew/events.*` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md` and the files `crew init` writes.
 5. **Commit:** commits only the files it created and pushes them to `main`, with the message `Set up Skeleton Crew`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -433,7 +433,7 @@ You can have several DM sessions open at once, but only one of them, the **lead*
   ```
 
   A claim writes a temporary file and links it into place, which fails if a lock already exists, so of two claims at the same moment only one wins, and no one ever reads a half-written lock. A takeover renames its file over the old lock. Only one claim at a time replaces an unreadable lock: it holds `.crew/lead.lock.repair` while it reads the lock again and replaces it, and any other claim meanwhile is refused and can simply run again. A takeover removes a guard that a dead claim left behind.
-- Only the lead starts Devs and Reviewers, merges, cancels and runs recovery. `crew` refuses these from any other session with one line that starts with `not-lead`, such as `not-lead: the lead was claimed at 2026-10-16T09:12Z by another session` or `not-lead: no lead; run crew dm claim`.
+- Only the lead starts Devs and Reviewers, merges, cancels, runs recovery, reads events and records harness wiring. `crew` refuses these from any other session with one line that starts with `not-lead`, such as `not-lead: the lead was claimed at 2026-10-16T09:12Z by another session` or `not-lead: no lead; run crew dm claim`.
 - Every other DM is **conversational**. It discusses implementation with you, records decisions, creates tickets from your requests and opens knowledge-only PRs. It never starts or merges work.
 - `crew dm release --lead <token>` gives up the lead when the lead session ends normally. Only the lead can release it.
 
@@ -458,7 +458,20 @@ An agent session only acts when it has a turn. Without help, the lead DM stops w
 
 ### Waiting for events
 
-`crew events` reports what changed since the previous call. It is the single signal the wiring triggers on.
+`crew events --lead <token>` reports what changed since the previous call. It is the single signal the wiring triggers on. It prints one line per event, oldest first, or `no events`:
+
+```
+$ crew events --lead 3f9a0c1e5b7d42a8961e0f3c2b4d6a81
+2026-10-16T09:12Z #12 reached 4:waiting-review
+2026-10-16T09:20Z #13 dev question: Should expired links show an error page or redirect?
+2026-10-16T09:30Z #14 unblocked
+2026-10-16T09:31Z #14 comment by the-user: Use Stripe.
+2026-10-16T10:12Z #12 stale at 4:waiting-review: no reviewer
+```
+
+- **Events** are the ones the lead DM must act on, on open tickets: a ticket reaching `3:eligible`; a Dev or Reviewer finishing, which is a ticket reaching `4:waiting-review`, `4:review-rejected` or `5:review-approved`, or a Dev `question`; a question being answered, which is `blocked` being cleared, an `answer` comment that is not the DM's, or a human comment; and a handoff going stale at a DM stage, at the time the [stale table](#status) gives. The lead DM's own work, such as starting a Dev or merging, is no event.
+- **Read state** is local: `.crew/events.read` in the main checkout records the time of the last call, and the next call reports what happened from then on. Event times are GitHub's timestamps, to the second, compared with the local clock, which must be in sync. An event in the same second as a call is reported again by the next call, and wakes the next wait at once; none is missed. The first call in a checkout reports nothing and starts the record. A missing or unreadable record counts as none, with a warning.
+- `crew events` is lead-only, so a session that has lost the lead cannot mark events read that the new lead has not seen.
 
 `crew events --wait` blocks until there is something unread, then exits without printing anything or marking anything read. Some harnesses can run a command in the background and wake the agent when it exits. In such a harness this is the whole wiring, and nothing is installed:
 
@@ -473,11 +486,13 @@ Some harnesses run background commands in a long-lived service of their own, so 
 - `--wait` never marks events read, so a leftover wait cannot swallow an event meant for the next lead DM.
 - Each `--wait` replaces the previous one. A wait that has been replaced exits quietly, so at most one wait runs, and a leftover stops as soon as a new lead DM starts waiting.
 
+A wait writes a random name to `.crew/events.wait` when it starts, replacing whatever is there. Every 30 seconds it reads the file, exits with status 0 and no output if it holds another name, and otherwise looks for unread events. No lock is involved: the last wait to start wins, and the others exit at their next look. With no read record, a wait exits at once, because everything counts as unread until the first `crew events`. The lead DM starts a wait only after its previous one has exited, so a replaced wait never wakes it into starting another.
+
 ### Checking the harness
 
 Every time a lead DM session starts, it checks its wiring:
 
-1. It identifies the harness it is running in.
+1. It identifies the harness it is running in. The second line of `crew brief dm` names it, as `crew init` detects it, with its record, such as `harness=claude-code wiring=wait`, `wiring=own` or `wiring=none`, or says `harness=unknown`.
 2. It looks the harness up in `.crew/crew.toml`:
    - **Recorded as supporting `crew events --wait`:** it uses it.
    - **Recorded with its own wiring:** it uses that wiring.
@@ -485,6 +500,20 @@ Every time a lead DM session starts, it checks its wiring:
 3. **Self-test.** It tells you: "If I have not continued within a minute, send me any message." It starts `crew events --wait --test` in the background, which exits after a few seconds as if an event had arrived, and ends its turn.
    - **Woken by the harness:** it records that the harness supports `crew events --wait`.
    - **Not woken:** when you send a message, it sees that the test event fired without waking it. It writes its own wiring with the harness's features, shows it to you and installs it only when you confirm. Then it records that wiring.
+
+The lead DM records the result with `crew dm wiring <harness> --wait`, or for its own wiring with `crew dm wiring <harness> --own "<how to start it>" --file <path>...`, naming every file of the wiring. The record is a table in `.crew/crew.toml`:
+
+```toml
+[harness.claude-code]
+wiring = "wait"
+
+[harness.opencode]
+wiring = "own"
+start = "Load the crew-wake plugin at the start of the session."
+files = [".opencode/plugins/crew-wake.ts"]
+```
+
+`crew dm wiring` replaces the harness's table, commits it with the named files straight to `main` and pushes, as `crew init` does. Both are crew configuration, not application code, so they do not go through the gate; the user has confirmed any wiring of the lead DM's own. It refuses when the checkout is not on `main` or `.crew/crew.toml` has uncommitted changes, and a failure, such as a refused push, changes nothing.
 
 Records are kept per harness, so a project used from several harnesses has one record for each. A record can go stale, for example when a harness update removes a feature. The lead DM then stops waking by itself. When you next prompt it, it finds events that should have woken it, runs the self-test again and updates the record.
 
@@ -574,6 +603,8 @@ AGENTS.md                 the seed file
 .crew/
   crew.toml               configuration
   lead.lock               which DM session holds the lead; not committed
+  events.read             when crew events last read; not committed
+  events.wait             which crew events --wait is the current one; not committed
   logs/                   full gate output; not committed, the newest 50 kept
   worktrees/              one worktree per ticket in flight; not committed
   docs/
@@ -661,13 +692,14 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 ### Lead DM
 
-`crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge` and `crew dm release` are lead-only. Each takes `--lead <token>` and is refused with `not-lead` without the lead's token.
+`crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge`, `crew events`, `crew dm wiring` and `crew dm release` are lead-only. Each takes `--lead <token>` and is refused with `not-lead` without the lead's token.
 
 | Command | Stage change |
 | --- | --- |
 | `crew dm claim [--takeover]` | Takes the lead and prints its token |
 | `crew dm release --lead <token>` | Gives up the lead |
-| `crew events [--wait [--test]]` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
+| `crew events [--wait [--test]] --lead <token>` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
+| `crew dm wiring <harness> --wait \| --own "<how to start it>" [--file <path>]... --lead <token>` | Records the harness's wiring in `.crew/crew.toml` and commits it, with the wiring's files, to `main` |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress` and sets `tier:<rank>`; creates the branch and worktree, and names the compose project `crew-<n>`; refused at the parallel cap |
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer, and posts the reason as a `review` comment by `dm`; one appeal per attempt, refused when the attempt ended with `crew ticket stuck` |
