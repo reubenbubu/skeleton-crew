@@ -34,7 +34,7 @@ func loadConfig(root string) (config.Config, profile.Profile, error) {
 	if err != nil {
 		return cfg, profile.Profile{}, err
 	}
-	p, err := profile.Builtin(cfg.Profile)
+	p, err := profile.Load(root, cfg.Profile)
 	return cfg, p, err
 }
 

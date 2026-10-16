@@ -74,9 +74,12 @@ func runInit(args []string, env Env) int {
 	if *name == "" {
 		return finish(env, usageError{"missing flag: --profile"}, false)
 	}
-	p, err := profile.Builtin(*name)
-	if err != nil {
+	p, err := profile.Load(env.Dir, *name)
+	if errors.Is(err, profile.ErrUnknown) {
 		return finish(env, usageError{err.Error()}, false)
+	}
+	if err != nil {
+		return finish(env, err, false)
 	}
 	if *repo != "" && !setup.RepoName.MatchString(*repo) {
 		return finish(env, usageError{"invalid --repo: " + *repo + "; want <owner>/<name>"}, false)
@@ -108,6 +111,9 @@ func printInit(w io.Writer, res setup.Result, checks []doctor.Check) error {
 	lines := []string{line, fmt.Sprintf("labels created %d", len(res.Labels))}
 	for _, f := range res.Wrote {
 		lines = append(lines, "wrote "+f)
+	}
+	for _, f := range res.Added {
+		lines = append(lines, "added "+f)
 	}
 	if res.Commit == "" {
 		lines = append(lines, "commit none")

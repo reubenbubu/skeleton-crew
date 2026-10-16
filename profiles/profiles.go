@@ -4,5 +4,5 @@ package profiles
 
 import "embed"
 
-//go:embed all:python
+//go:embed all:java-spring all:node-ts all:python
 var FS embed.FS

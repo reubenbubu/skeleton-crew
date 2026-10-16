@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["mvn", "-B", "-q", "spring-boot:run"]
+    ports:
+      - "8080"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+  db:
+    image: docker.io/library/postgres:18
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - db-data:/var/lib/postgresql
+volumes:
+  db-data:

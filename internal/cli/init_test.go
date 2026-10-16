@@ -610,3 +610,44 @@ func TestInitStopsOnOtherProfile(t *testing.T) {
 		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 }
+
+// #15-AC4: crew init takes a custom profile written into the project like a
+// built-in one, and commits it with the files it writes.
+func TestInitCustomProfile(t *testing.T) {
+	p := newProject(t, "user/app")
+	p.write(".crew/profiles/elixir/profile.toml", "[commands]\ntest = \"mix test\"\ntest-changed = \"mix test\"\n[tests]\nglobs = [\"test/**/*_test.exs\"]\n")
+	p.write(".crew/profiles/elixir/docs/conventions.md", "# Conventions\n")
+	p.write(".crew/profiles/elixir/scaffold/compose.yaml", "services:\n  app:\n")
+	p.write(".crew/profiles/elixir/scaffold/.gitignore", "_build/\n")
+	out := p.mustInit("--profile", "elixir")
+	for _, want := range []string{"wrote .crew/docs/conventions.md\n", "wrote compose.yaml\n", "added .crew/profiles/elixir\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	want := []string{".crew/crew.toml", ".crew/docs/conventions.md", ".crew/profiles/elixir/docs/conventions.md", ".crew/profiles/elixir/profile.toml", ".crew/profiles/elixir/scaffold/.gitignore", ".crew/profiles/elixir/scaffold/compose.yaml", ".gitignore", "compose.yaml"}
+	if got := p.committed(); !slices.Equal(got, want) {
+		t.Errorf("committed %v\nwant %v", got, want)
+	}
+	if !strings.Contains(p.read(".crew/crew.toml"), "profile = \"elixir\"\n") || !strings.Contains(p.read(".gitignore"), "_build/\n") {
+		t.Errorf("crew.toml or .gitignore")
+	}
+	// Run again, it changes nothing.
+	if out := p.mustInit("--profile", "elixir"); !strings.Contains(out, "commit none\n") || strings.Contains(out, "added") {
+		t.Errorf("second run:\n%s", out)
+	}
+}
+
+func TestInitCustomProfileRefusals(t *testing.T) {
+	p := newProject(t, "user/app")
+	p.write(".crew/profiles/broken/profile.toml", "[commands]\ntest = \"t\"\n")
+	if code, out, errOut := p.run("init", "--profile", "broken"); code != 1 || out != "" || errOut != ".crew/profiles/broken/profile.toml: commands.test-changed is missing\n" {
+		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	if code, _, errOut := p.run("init", "--profile", "cobol"); code != 2 || errOut != "unknown profile: cobol\n" {
+		t.Fatalf("got code=%d stderr=%q", code, errOut)
+	}
+	if w := p.writes(); len(w) != 0 {
+		t.Fatalf("writes %v", w)
+	}
+}

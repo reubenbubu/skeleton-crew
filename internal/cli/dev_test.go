@@ -480,6 +480,23 @@ func TestRun(t *testing.T) {
 	p.refused(1, "the python profile has no e2e command", "run", "e2e")
 }
 
+// #15-AC4: the commands of a custom profile in the main checkout run like a
+// built-in profile's.
+func TestRunCustomProfile(t *testing.T) {
+	p := newDevProject(t)
+	p.write(".crew/crew.toml", strings.Replace(string(config.Template("python", "")), `profile = "python"`, `profile = "elixir"`, 1))
+	p.write(".crew/profiles/elixir/profile.toml", "[commands]\ntest = \"mix test\"\ntest-changed = \"mix test --stale\"\n[tests]\nglobs = [\"test/**/*_test.exs\"]\n")
+	p.inWorktree()
+	p.box.out, p.box.code = "ok\n", 0
+	if code, out, errOut := p.run("run", "test-changed", "test/login_test.exs"); code != 0 || out != "ok\n" || errOut != "" {
+		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	if want := p.dir + ` -p crew-1 run --rm -T app sh -c mix test --stale "$@" sh test/login_test.exs`; p.box.calls[len(p.box.calls)-1] != want {
+		t.Fatalf("calls %q; want %q", p.box.calls, want)
+	}
+	p.refused(1, "the elixir profile has no build command", "run", "build")
+}
+
 // #7-AC8
 func TestAsk(t *testing.T) {
 	p := newDevProject(t)

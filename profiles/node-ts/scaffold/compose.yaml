@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    command: ["node", "src/main.ts"]
+    ports:
+      - "3000"
+    volumes:
+      - .:/app
+      - /app/node_modules

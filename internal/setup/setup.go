@@ -43,6 +43,7 @@ type Result struct {
 	Visibility string   `json:"visibility,omitempty"` // private or public, when created
 	Labels     []string `json:"labels"`               // the labels created
 	Wrote      []string `json:"wrote"`                // the files written, relative to Dir
+	Added      []string `json:"added"`                // the custom profile's directory, when its changes were committed
 	Commit     string   `json:"commit"`               // "" when nothing was committed
 }
 
@@ -52,7 +53,7 @@ var RepoName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 // Init sets up the project in o.Dir. It checks everything it can before it
 // changes anything, and stops at the first problem.
 func Init(o Options) (Result, error) {
-	res := Result{Labels: []string{}, Wrote: []string{}}
+	res := Result{Labels: []string{}, Wrote: []string{}, Added: []string{}}
 	dir := o.Dir
 	r := &git.Repo{Dir: dir}
 
@@ -135,7 +136,7 @@ func Init(o Options) (Result, error) {
 	}
 	w.tree(o.Profile.Docs, ".crew/docs")
 	var ignore []string
-	if isNew {
+	if isNew && o.Profile.Scaffold != nil {
 		w.tree(o.Profile.Scaffold, ".")
 		if b, err := fs.ReadFile(o.Profile.Scaffold, ".gitignore"); err == nil {
 			ignore = strings.Fields(string(b))
@@ -146,8 +147,19 @@ func Init(o Options) (Result, error) {
 		return res, w.err
 	}
 	slices.Sort(res.Wrote)
+	paths := res.Wrote
+	if c := o.Profile.Custom; c != "" {
+		changed, err := r.Changed(c)
+		if err != nil {
+			return res, err
+		}
+		if changed {
+			res.Added = append(res.Added, c)
+			paths = append(slices.Clone(paths), c)
+		}
+	}
 
-	if len(res.Wrote) == 0 {
+	if len(paths) == 0 {
 		// A run whose push failed left main unpushed; finish it.
 		if res.Commit, err = r.LocalMain(); err != nil || res.Commit == "" || remoteMain {
 			res.Commit = ""
@@ -155,7 +167,7 @@ func Init(o Options) (Result, error) {
 		}
 		return res, r.PushMain()
 	}
-	if res.Commit, err = r.CommitOnly(CommitMessage, res.Wrote); err != nil {
+	if res.Commit, err = r.CommitOnly(CommitMessage, paths); err != nil {
 		return res, err
 	}
 	return res, r.PushMain()
@@ -277,6 +289,9 @@ func (w *writer) file(rel string, data []byte) {
 // tree writes every file of fsys under the directory to, except a
 // .gitignore at its root, which ignore merges.
 func (w *writer) tree(fsys fs.FS, to string) {
+	if fsys == nil {
+		return
+	}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || p == ".gitignore" {
 			return err

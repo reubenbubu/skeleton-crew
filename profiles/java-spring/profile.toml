@@ -1,0 +1,14 @@
+[commands]
+setup        = "mvn -B -q dependency:go-offline"
+build        = "mvn -B -q compile test-compile"
+lint         = "mvn -B -q spotless:check"
+test         = "mvn -B -q test"
+# crew appends the changed test files as arguments; Maven takes class names.
+test-changed = "t() { c=; for f in \"$@\"; do n=${f##*/}; c=$c${c:+,}${n%.java}; done; mvn -B -q test -Dsurefire.failIfNoSpecifiedTests=false ${c:+-Dtest=$c}; }; t"
+run          = "mvn -B -q spring-boot:run"
+health       = "curl -fsS http://localhost:8080/actuator/health"
+e2e          = "mvn -B -q test -Dtest='*E2E' -Dsurefire.failIfNoSpecifiedTests=false"
+
+[tests]
+globs = ["src/test/java/**/*Test.java", "src/test/java/**/*Tests.java"]
+skip  = ["@Disabled", "@Ignore", "@EnabledIf", "@EnabledOn", "assumeTrue(", "assumeFalse(", "assumingThat("]

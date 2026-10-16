@@ -1,0 +1,13 @@
+[commands]
+setup        = "npm install"
+build        = "npx tsc"
+lint         = "npx eslint . && npx prettier --check ."
+test         = "node --test"
+test-changed = "node --test"   # crew appends the changed test files as arguments
+run          = "node src/main.ts"
+health       = "node -e \"fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""
+e2e          = "node --test \"e2e/**/*.e2e.ts\""
+
+[tests]
+globs = ["src/**/*.test.ts", "test/**/*.test.ts"]
+skip  = [".skip(", ".todo(", "skip:", "todo:"]

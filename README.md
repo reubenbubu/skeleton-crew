@@ -37,7 +37,7 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
    - **GitHub release (default):** downloads the pinned release binary and verifies its checksum and GitHub artifact attestation.
    - **Build from source:** clones the pinned tag and builds it inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so a local build matches the release checksum byte for byte.
    - If you already have Go: `go install` at the pinned tag.
-3. Asks you which profile the project uses, then runs `crew init` with your answers. `crew init` takes flags only and never prompts; the agent has the conversation with you.
+3. Asks you which profile the project uses, then runs `crew init` with your answers. For a stack that no built-in profile covers, the agent first writes a [custom profile](#custom-profiles). `crew init` takes flags only and never prompts; the agent has the conversation with you.
 4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
@@ -51,8 +51,8 @@ crew init --profile <name> [--harness <name>] [--repo <owner>/<name>] [--public]
 1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
 3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*` and `.crew/events.*` to `.gitignore`.
-4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md` and the files `crew init` writes.
-5. **Commit:** commits only the files it created and pushes them to `main`, with the message `Set up Skeleton Crew`. Your own uncommitted changes are left alone.
+4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md`, `.crew/` and `.gitignore`.
+5. **Commit:** commits only the files it created, and a custom profile's directory when it has uncommitted changes, and pushes them to `main`, with the message `Set up Skeleton Crew`. The output names each file written as `wrote <path>` and the custom profile as `added .crew/profiles/<name>`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
 
 Running `crew init` again is safe. It never overwrites a file, adds only what is missing, and makes no commit when nothing is missing. If an earlier run committed but could not push to a new repository, it pushes.
@@ -583,7 +583,23 @@ A command that is left out is a step that does not apply. `crew` runs `test-chan
 
 Every profile's `compose.yaml` has a service called `app`, which runs the profile's commands: `crew` runs `<engine> compose -p crew-<ticket> run --rm -T app sh -c '<command>'` in the ticket's worktree. The engine is the first of Podman and Docker that has compose, as `crew doctor` reports.
 
-Built-in profiles: **python**, **node-ts**, **java-spring**. At bootstrap you can choose one of them or describe your own stack, and the DM writes a custom profile for it.
+Built-in profiles:
+
+| Profile | Stack | Database |
+| --- | --- | --- |
+| `python` | Python 3.13, pytest, Ruff | none |
+| `node-ts` | TypeScript on Node.js 24, run without a build step; `node:test`, `tsc`, ESLint, Prettier | none |
+| `java-spring` | Java 25, Spring Boot, Maven, JUnit 5, Spotless | PostgreSQL 18 with Flyway migrations |
+
+End-to-end tests are not test files under the profile's globs: they need the running stack, so they run only in the gate's `e2e` step, not in red and green steps.
+
+The `java-spring` migration rules: a migration is `src/main/resources/db/migration/V<UTC time as yyyyMMddHHmmss>__<what_it_does>.sql`. Time-based versions do not clash between tickets, so a rebase never renumbers one, and Flyway's `out-of-order` setting applies a migration merged after one with a later version. The rules are in the profile's `conventions.md`.
+
+At bootstrap you can choose one of them or describe your own stack, and the agent writes a custom profile for it.
+
+### Custom profiles
+
+A custom profile lives in the project, at `.crew/profiles/<name>/`, with the same layout as a built-in one: `profile.toml`, and optionally `docs/` and `scaffold/`. `crew init --profile <name>` uses it like a built-in profile and commits it, and every later command loads it from the main checkout, so the profile changes through the normal flow. A custom profile may not take a built-in profile's name; `crew` refuses it with `.crew/profiles/<name>: <name> is a built-in profile; rename the custom one`.
 
 The application always runs in containers, never directly on the host. Agents run on the host through your harness, but everything the code needs runs through compose: tests, builds, the app and its database. Your machine needs no language toolchains.
 
@@ -607,6 +623,7 @@ Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project. Th
 AGENTS.md                 the seed file
 .crew/
   crew.toml               configuration
+  profiles/<name>/        a custom profile, if the project has one
   lead.lock               which DM session holds the lead; not committed
   events.read             when crew events last read; not committed
   events.wait             which crew events --wait is the current one; not committed

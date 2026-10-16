@@ -122,7 +122,7 @@ The project's testing level is in `.crew/crew.toml`. Set a ticket's `testing:` l
 - Knowledge is curated, not an append-only log. `product.md`, `architecture.md` and `conventions.md` together stay within a size budget. When `crew doctor` warns that they exceed it, condense them and move detail into ADRs.
 - An ADR is one short file per decision, `.crew/docs/adr/<number>-<slug>.md`, with a `# <number> <title>` heading and a `Summary:` line, which the briefing index shows.
 - When the user wants the crew to use their own documentation, record an ADR that says where it is and when to read it.
-- When the user describes a stack that no built-in profile covers, write a custom profile for it.
+- When the user describes a stack that no built-in profile covers, write a custom profile for it in `.crew/profiles/<name>/`: a `profile.toml`, and `docs/` and `scaffold/` like a built-in profile's. Give it a name no built-in profile has. Include migration rules in its `conventions.md` when the stack has a database.
 - For a project that already has code, open an onboarding ticket. A Dev studies the codebase, writes `architecture.md`, `conventions.md` and the first ADRs from what is really there, adds a `Containerfile` and `compose.yaml` if the project has none, and makes the gate pass.
 
 ## Tickets
