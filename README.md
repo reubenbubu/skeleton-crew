@@ -476,9 +476,11 @@ AGENTS.md                 the seed file
 
 Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte.
 
+`crew` reaches GitHub only through `gh api`, with your own `gh` login. It never reads, prints or stores the token.
+
 An unknown command or flag exits non-zero with one line that names it, such as `unknown flag: --bogus`.
 
-`crew` does the deterministic work: the normal path and the invariants, such as stage order, the gate before merge, TDD checks, staying in sync with GitHub and keeping secrets out. When it meets something outside the normal path, such as an unusual git state or an unexpected GitHub response, it changes nothing, stops and reports what it found. The DM then handles the case with judgement. It may use `git` and `gh` directly, unlike Devs and Reviewers, but it must still respect the invariants, and it records what it did as a `decision` comment.
+`crew` does the deterministic work: the normal path and the invariants, such as stage order, the gate before merge, TDD checks, staying in sync with GitHub and keeping secrets out. When it meets something outside the normal path, such as an unusual git state or an unexpected GitHub response, it changes nothing, stops and reports what it found in one line, such as `unexpected github response: POST repos/<owner>/<repo>/labels: HTTP 422 Validation Failed (name: already_exists)`. The DM then handles the case with judgement. It may use `git` and `gh` directly, unlike Devs and Reviewers, but it must still respect the invariants, and it records what it did as a `decision` comment.
 
 There is no generic "set stage" command. Each stage change has exactly one command, and that command checks that the move is legal. This is how `crew` keeps stage numbers from going backwards.
 

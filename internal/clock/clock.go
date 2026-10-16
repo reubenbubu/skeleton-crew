@@ -19,7 +19,7 @@ type Clock interface {
 // Real is the system clock.
 type Real struct{}
 
-func (Real) Now() time.Time                         { return time.Now().UTC() }
+func (Real) Now() time.Time { return time.Now().UTC() }
 func (Real) After(d time.Duration) <-chan time.Time {
 	ch := make(chan time.Time, 1)
 	time.AfterFunc(d, func() { ch <- time.Now().UTC() })
