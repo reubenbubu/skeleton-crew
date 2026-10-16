@@ -442,3 +442,41 @@ func (r *Repo) RemoveWorktree(path string) error {
 	_, err := git(r.Dir, "worktree", "prune")
 	return err
 }
+
+// IsAncestor reports whether commit a is an ancestor of commit b, or b
+// itself.
+func (r *Repo) IsAncestor(a, b string) (bool, error) {
+	_, err := git(r.Dir, "merge-base", "--is-ancestor", a, b)
+	if e, ok := err.(*Error); ok && e.Detail == "exit status 1" {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// Rebase rebases HEAD onto commit onto. On a conflict it aborts the rebase,
+// which leaves HEAD as it was, and returns the conflicting paths.
+func (r *Repo) Rebase(onto string) (conflicts []string, err error) {
+	_, err = git(r.Dir, "rebase", "--quiet", onto)
+	if err == nil {
+		return nil, nil
+	}
+	out, uerr := git(r.Dir, "diff", "--name-only", "--diff-filter=U", "-z")
+	// A rebase that never started leaves nothing to abort, and its own
+	// error says why.
+	if _, aerr := git(r.Dir, "rebase", "--abort"); aerr != nil || uerr != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSuffix(out, "\x00"), "\x00"), nil
+}
+
+// Push pushes commit sha to branch on origin. With lease "", origin accepts
+// only a fast-forward; otherwise branch must still be at commit lease, and
+// is replaced.
+func (r *Repo) Push(sha, branch, lease string) error {
+	args := []string{"push", "--quiet"}
+	if lease != "" {
+		args = append(args, "--force-with-lease=refs/heads/"+branch+":"+lease)
+	}
+	_, err := git(r.Dir, append(args, "origin", sha+":refs/heads/"+branch)...)
+	return err
+}

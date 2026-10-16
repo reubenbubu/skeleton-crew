@@ -261,11 +261,18 @@ func (g *GitHub) Requests() []string {
 }
 
 // SetBranch makes branch name point at commit sha, as a push would. Pull
-// requests from the branch follow it, and statuses can be set on sha.
+// requests from the branch follow it, and statuses can be set on sha. As on
+// GitHub, an open pull request into name whose head is at sha is merged and
+// closed.
 func (g *GitHub) SetBranch(name, sha string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.branches[name] = sha
+	for _, i := range g.issues {
+		if i.pull != nil && i.state == "open" && i.pull.base == name && sha != "" && g.branches[i.pull.head] == sha {
+			i.pull.merged, i.state = true, "closed"
+		}
+	}
 }
 
 // IssueLabels returns the names of the labels on issue number.

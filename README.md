@@ -325,11 +325,16 @@ Agents make mistakes, and tests written first are the guardrail that catches the
 ## Review and merge
 
 - Every ticket gets a Reviewer. It starts with fresh context: the ticket, the acceptance criteria and the diff, not the Dev's reasoning.
-- The Reviewer posts its verdict as a PR review. The verdict is binding: an approval goes to merge, and a rejection means a new attempt.
+- The Reviewer posts its verdict with `crew review`. The verdict is binding: an approval goes to merge, and a rejection means a new attempt.
+- Every agent uses your `gh` login, so every PR is your own, and GitHub refuses an approval or a change request on your own PR. The verdict is therefore a comment review on the PR's head commit, whose body is a marker line, `<!-- crew:review reviewer -->`, followed by `approved` or `rejected: <reason>`. The stage label carries the binding verdict. `crew review` also posts the verdict as a `review` comment on the ticket, so `crew ticket show` shows it to the DM and to a second Reviewer.
 - A rejection the DM believes is wrong is an exception for the DM to judge, but the DM cannot overrule the Reviewer alone. It runs `crew ticket appeal <n> "<reason>"`, which moves the ticket from `4:review-rejected` back to `4:waiting-review` for a second Reviewer. That Reviewer starts fresh and sees the first rejection and the DM's reason. If it approves, the ticket goes to `5:review-approved`. If it rejects, the rejection stands.
 - An appeal is not a failed attempt and does not change the rank. Each attempt allows one appeal.
 - The gate decides whether code can merge. See [Gates](#gates).
 - The DM merges by pushing the gated commit to `main` as a fast-forward. GitHub then marks the PR as merged. There are no merge commits, and GitHub's own rebase merge is not used because it rewrites commits, so `main` would hold commits the gate never tested.
+- `crew merge` moves the ticket to `6:pending-merge`, then fetches. If `main` has moved, it rebases the branch onto `origin/main` in a detached worktree at `.crew/worktrees/merge/<ticket>` and pushes the result to the branch. It runs the gate on the branch's commit unless that commit already has a successful `crew/gate` status, then pushes it to `main` without force, so only a fast-forward is accepted.
+- A rebase conflict changes nothing: `crew merge` aborts the rebase, leaves the ticket at `6:pending-merge` and lists the conflicting files, such as `merge-conflict: #12 stays at 6:pending-merge: src/app/login.py`. A failed gate also leaves the ticket at stage 6. `crew merge` accepts a ticket at `6:pending-merge`, so it runs again once the DM has handled the case.
+- After the merge, the ticket moves to `7:merged`, and on to `9:done` with its issue closed when there is no deployment workflow. `crew merge` then removes the ticket's worktree and stops its compose project with `down --volumes`.
+- If a step after the push to `main` fails, such as a stage move or the cleanup, `crew merge` stops and reports it after the line `merged <commit> into main`. The DM finishes the remaining steps by hand.
 
 ## Gates
 
@@ -494,7 +499,7 @@ The application always runs in containers, never directly on the host. Agents ru
 
 ## Deployment
 
-Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`. Without a deployment workflow, merging finishes the ticket.
+Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. It is `.github/workflows/deploy.yml` or `.github/workflows/deploy.yaml`, and `crew` looks for it in the merged commit. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`. Without a deployment workflow, merging finishes the ticket.
 
 ## Prompts and project knowledge
 
@@ -587,7 +592,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up; enforces `top_attempts` |
 | `crew ticket split <n>` | Creates child tickets at `2:drafting`, for the PM to complete, and cancels the parent |
-| `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`; gates again if `main` moved, then fast-forwards `main` |
+| `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`, and to `9:done` without a deployment workflow; rebases and gates again if `main` moved, then fast-forwards `main`. Also accepts a ticket at `6:pending-merge` |
 | `crew ticket cancel <n>` | Any open stage to `0:cancelled` |
 
 ### Dev
@@ -608,8 +613,8 @@ Run inside the ticket's worktree.
 
 | Command | Stage change |
 | --- | --- |
-| `crew review <n> --approve` | Posts the PR review; `4:waiting-review` to `5:review-approved` |
-| `crew review <n> --reject "<reason>"` | Posts the PR review; `4:waiting-review` to `4:review-rejected` |
+| `crew review <n> --approve` | Posts the verdict as a PR comment review and a ticket comment; `4:waiting-review` to `5:review-approved` |
+| `crew review <n> --reject "<reason>"` | Posts the verdict as a PR comment review and a ticket comment; `4:waiting-review` to `4:review-rejected` |
 
 ### Anyone
 

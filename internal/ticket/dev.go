@@ -236,3 +236,72 @@ func Submit(c *github.Client, number int) error {
 	_, err := move(c, number, "4:in-progress", "4:waiting-review", nil)
 	return err
 }
+
+// Review posts the Reviewer's verdict on ticket number, which must be at
+// 4:waiting-review, and moves it to 5:review-approved, or to
+// 4:review-rejected when reason is not "". GitHub refuses an approval or a
+// change request on one's own pull request, and every agent uses the user's
+// login, so the verdict is a comment review of the PR's head commit. It is
+// also a review comment on the ticket, for crew ticket show. Review returns
+// the PR's number.
+func Review(c *github.Client, number int, reason string) (int, error) {
+	i, f, err := get(c, number)
+	if err != nil {
+		return 0, err
+	}
+	if f.Stage != "4:waiting-review" {
+		return 0, stageChanged(number, f.Stage, "4:waiting-review")
+	}
+	branch := Branch(f.Kind, number, i.Title)
+	prs, err := c.PullRequests(branch, "open")
+	if err != nil {
+		return 0, err
+	}
+	if len(prs) == 0 {
+		return 0, fmt.Errorf("#%d has no open PR from %s", number, branch)
+	}
+	pr := prs[0]
+	body, to := Marker("review", "reviewer")+"approved", "5:review-approved"
+	if reason != "" {
+		body, to = Marker("review", "reviewer")+"rejected: "+reason, "4:review-rejected"
+	}
+	if _, err := c.CreateReview(pr.Number, github.NewReview{Event: "COMMENT", Body: body, CommitID: pr.Head.SHA}); err != nil {
+		return pr.Number, err
+	}
+	if _, err := c.CreateComment(number, body); err != nil {
+		return pr.Number, err
+	}
+	_, err = move(c, number, "4:waiting-review", to, nil)
+	return pr.Number, err
+}
+
+// PendingMerge moves ticket number from 5:review-approved to
+// 6:pending-merge and returns it. A ticket already at 6:pending-merge, whose
+// merge stopped before, stays there.
+func PendingMerge(c *github.Client, number int) (github.Issue, Fields, error) {
+	i, f, err := get(c, number)
+	if err != nil {
+		return i, f, err
+	}
+	if !slices.Contains(Kinds, f.Kind) {
+		return i, f, fmt.Errorf("#%d has no single kind: kind=%s", number, f.Kind)
+	}
+	if f.Stage != "6:pending-merge" {
+		_, err = move(c, number, "5:review-approved", "6:pending-merge", nil)
+	}
+	return i, f, err
+}
+
+// Merged moves ticket number from 6:pending-merge to 7:merged. Without a
+// deployment workflow it goes on to 9:done and is closed. Merged returns
+// the stage reached.
+func Merged(c *github.Client, number int, deploy bool) (string, error) {
+	if _, err := move(c, number, "6:pending-merge", "7:merged", nil); err != nil || deploy {
+		return "7:merged", err
+	}
+	if _, err := move(c, number, "7:merged", "9:done", nil); err != nil {
+		return "7:merged", err
+	}
+	_, err := c.EditIssue(number, github.IssueEdit{State: "closed", StateReason: "completed"})
+	return "9:done", err
+}

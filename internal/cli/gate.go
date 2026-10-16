@@ -56,29 +56,9 @@ func runTicketSubmit(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
-	if err := setGate(c, sha, "pending", "gate running"); err != nil {
-		return finish(env, err, false)
-	}
-	res, err := runGate(env, r, repo, c, h.number, issue.Body, prof, base, sha)
-	if err != nil {
-		setGate(c, sha, "error", "gate could not run")
-		return finish(env, err, false)
-	}
-	if res.failed != "" {
-		statusErr := setGate(c, sha, "failure", "gate failed: "+res.failed)
-		ls := append(res.flags, res.problems...)
-		if res.output != "" {
-			ls = append(ls, strings.TrimSuffix(res.output, "\n"))
-		}
-		last := "gate failed: " + res.failed
-		if res.log != "" {
-			last += "; full output: " + res.log
-		}
-		lines(env.Stderr, append(ls, last)...)
-		return finish(env, statusErr, true)
-	}
-	if err := setGate(c, sha, "success", "gate passed"); err != nil {
-		return finish(env, err, false)
+	flagged, err := gateCommit(env, r, repo, c, h.number, issue.Body, prof, base, sha)
+	if err != nil || flagged == nil {
+		return finish(env, err, flagged == nil)
 	}
 	if err := ticket.Submit(c, h.number); err != nil {
 		return finish(env, err, false)
@@ -89,9 +69,9 @@ func runTicketSubmit(args []string, env Env) int {
 			Commit string   `json:"commit"`
 			Stage  string   `json:"stage"`
 			Flags  []string `json:"flags"`
-		}{h.number, sha, "4:waiting-review", append([]string{}, res.flags...)})
+		}{h.number, sha, "4:waiting-review", flagged})
 	} else {
-		err = lines(env.Stdout, append(res.flags, "gate passed "+sha[:7], fmt.Sprintf("#%d stage=4:waiting-review", h.number))...)
+		err = lines(env.Stdout, append(flagged, "gate passed "+sha[:7], fmt.Sprintf("#%d stage=4:waiting-review", h.number))...)
 	}
 	return finish(env, err, false)
 }
@@ -122,6 +102,45 @@ func pushedCommit(repo *git.Repo, branch string) (sha, base string, err error) {
 		return "", "", errors.New("the last commit is not pushed to origin/" + branch)
 	}
 	return head, base, nil
+}
+
+// gateCommit runs the gate on commit sha of ticket number and posts its
+// crew/gate status. It returns the gate's flags, never nil, when the gate
+// passed. When it failed, it prints why and returns nil.
+func gateCommit(env Env, root string, repo *git.Repo, c *github.Client, number int, body string, prof profile.Profile, base, sha string) ([]string, error) {
+	if err := setGate(c, sha, "pending", "gate running"); err != nil {
+		return nil, err
+	}
+	res, err := runGate(env, root, repo, c, number, body, prof, base, sha)
+	if err != nil {
+		setGate(c, sha, "error", "gate could not run")
+		return nil, err
+	}
+	if res.failed != "" {
+		statusErr := setGate(c, sha, "failure", "gate failed: "+res.failed)
+		ls := append(res.flags, res.problems...)
+		if res.output != "" {
+			ls = append(ls, strings.TrimSuffix(res.output, "\n"))
+		}
+		last := "gate failed: " + res.failed
+		if res.log != "" {
+			last += "; full output: " + res.log
+		}
+		lines(env.Stderr, append(ls, last)...)
+		return nil, statusErr
+	}
+	if err := setGate(c, sha, "success", "gate passed"); err != nil {
+		return nil, err
+	}
+	return append([]string{}, res.flags...), nil
+}
+
+// gated reports whether commit sha has passed the gate.
+func gated(c *github.Client, sha string) (bool, error) {
+	s, err := c.CombinedStatus(sha)
+	return slices.ContainsFunc(s.Statuses, func(st github.Status) bool {
+		return st.Context == "crew/gate" && st.State == "success"
+	}), err
 }
 
 func setGate(c *github.Client, sha, state, description string) error {

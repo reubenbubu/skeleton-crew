@@ -161,6 +161,24 @@ func TestPullRequestsAndReviews(t *testing.T) {
 	}
 }
 
+// #9-AC4: as on GitHub, a push of a pull request's head commit to its base
+// marks it merged and closes it.
+func TestPushingTheHeadToTheBaseMergesThePullRequest(t *testing.T) {
+	c, fake := setup(t)
+	fake.SetBranch("main", "aaa")
+	fake.SetBranch("feat/1/login", "bbb")
+	fake.SetBranch("feat/2/other", "ccc")
+	must[github.PullRequest](t)(c.CreatePullRequest(github.NewPullRequest{Title: "Login", Head: "feat/1/login", Base: "main"}))
+	must[github.PullRequest](t)(c.CreatePullRequest(github.NewPullRequest{Title: "Other", Head: "feat/2/other", Base: "main"}))
+	fake.SetBranch("main", "bbb")
+	if got := must[github.PullRequest](t)(c.PullRequest(1)); !got.Merged || got.State != "closed" {
+		t.Fatalf("pr 1 %+v", got)
+	}
+	if got := must[github.PullRequest](t)(c.PullRequest(2)); got.Merged || got.State != "open" {
+		t.Fatalf("pr 2 %+v", got)
+	}
+}
+
 // #3-AC2
 func TestCommitStatuses(t *testing.T) {
 	c, fake := setup(t)
