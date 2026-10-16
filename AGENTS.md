@@ -31,7 +31,8 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 
 - `crew` is written in Go and builds with `CGO_ENABLED=0` and `-trimpath`, so builds are reproducible.
 - The user's machine needs no Go toolchain; the self-build path compiles inside the official Go container image.
-- Tests must not touch real GitHub repositories. Use fakes or a local test server for the GitHub API.
+- Automated tests must not touch real GitHub repositories. Use fakes or a local test server for the GitHub API.
+- Field tests run the whole pipeline against a real repository: the agent plays the user, sends requests to a PM or DM session, and checks the tickets, PRs, gates, reviews and merges that result. Each field test creates its own private repository with a randomized name and deletes it when the test is done. Never use one of the user's existing repositories.
 
 ## Output contract
 
