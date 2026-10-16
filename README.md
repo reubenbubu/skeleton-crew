@@ -38,8 +38,7 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
    - **Build from source:** clones the pinned tag and builds it inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so a local build matches the release checksum byte for byte.
    - If you already have Go: `go install` at the pinned tag.
 3. Asks you which profile the project uses, then runs `crew init` with your answers. `crew init` takes flags only; the agent has the conversation with you.
-4. Offers to set up [harness wiring](#keeping-the-lead-dm-running) and shows it to you before installing it.
-5. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
+4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
 
@@ -64,7 +63,7 @@ The DM then opens an **onboarding ticket**, which goes through the normal flow. 
 - An agent harness that reads `AGENTS.md`, runs shell commands, and lets an agent start subagents without your intervention.
 - Linux or macOS. On Windows, use WSL.
 
-No harness plugins, hooks or MCP servers are required. Harness wiring, which the agent writes for its own harness, is optional; it lets the lead DM work without prompting.
+No harness plugins, hooks or MCP servers are required. [Harness wiring](#keeping-the-lead-dm-running) lets the lead DM work without prompting. The lead DM checks for it itself; it needs nothing installed when the harness can wake an agent on a background command's exit.
 
 ## Tickets
 
@@ -345,17 +344,49 @@ No internal mechanism may stop the crew from making progress. For the lead this 
 
 An agent session only acts when it has a turn. Without help, the lead DM stops when it runs out of work and waits for a prompt, even after new work becomes eligible. Keeping it in a long polling loop is not acceptable either, because every idle check would grow its context.
 
-Each harness has its own features for this, so `crew` ships no harness adapters. Instead, `crew` defines what the wiring must achieve, and the agent that bootstraps the project, PM or DM, writes the wiring with its own harness's features. It shows you the wiring and installs it only when you confirm.
+`crew` ships no harness adapters. It provides one command to wait on, and it defines what any wiring must achieve. The lead DM checks its harness every time it starts and uses the lightest wiring that works.
 
-The wiring must:
+### Waiting for events
+
+`crew events` reports what changed since the previous call. It is the single signal the wiring triggers on.
+
+`crew events --wait` blocks until there is something unread, then exits without printing anything or marking anything read. Some harnesses can run a command in the background and wake the agent when it exits. In such a harness this is the whole wiring, and nothing is installed:
+
+1. The lead DM starts `crew events --wait` in the background and ends its turn.
+2. When something happens, the command exits and the harness wakes the lead DM.
+3. The lead DM runs `crew events`, does the work, and starts `crew events --wait` again.
+
+Waiting costs the lead DM's context nothing, because the waiting happens in the shell.
+
+Some harnesses run background commands in a long-lived service of their own, so a wait can outlive the session that started it. Two rules make a leftover wait harmless:
+
+- `--wait` never marks events read, so a leftover wait cannot swallow an event meant for the next lead DM.
+- Each `--wait` replaces the previous one. A wait that has been replaced exits quietly, so at most one wait runs, and a leftover stops as soon as a new lead DM starts waiting.
+
+### Checking the harness
+
+Every time a lead DM session starts, it checks its wiring:
+
+1. It identifies the harness it is running in.
+2. It looks the harness up in `.crew/crew.toml`:
+   - **Recorded as supporting `crew events --wait`:** it uses it.
+   - **Recorded with its own wiring:** it uses that wiring.
+   - **Not recorded:** it runs the self-test.
+3. **Self-test.** It tells you: "If I have not continued within a minute, send me any message." It starts `crew events --wait --test` in the background, which exits after a few seconds as if an event had arrived, and ends its turn.
+   - **Woken by the harness:** it records that the harness supports `crew events --wait`.
+   - **Not woken:** when you send a message, it sees that the test event fired without waking it. It writes its own wiring with the harness's features, shows it to you and installs it only when you confirm. Then it records that wiring.
+
+Records are kept per harness, so a project used from several harnesses has one record for each. A record can go stale, for example when a harness update removes a feature. The lead DM then stops waking by itself. When you next prompt it, it finds events that should have woken it, runs the self-test again and updates the record.
+
+### What wiring must do
+
+Whether it is `crew events --wait` or the lead DM's own, the wiring must:
 
 1. **Be event-driven.** The lead DM wakes only when something happened: a Dev or Reviewer finished, a ticket became eligible, a question was answered, or a handoff went stale. Context then grows with work done, not with time. Compaction is safe because all state is on GitHub.
 2. **Prefer fresh context.** If the harness can start a fresh, short session per event, each wake reads `crew status`, does one round of work and ends.
-3. **Live inside the harness.** No cron jobs, system services or other processes outside the harness session.
+3. **Live inside the harness.** No cron jobs, system services or other processes outside the harness. A wait left behind when a session ends may keep running inside the harness until it is replaced.
 4. **Leave you in control.** It stops when the session closes or when you say so, and never blocks you from talking to a DM.
-5. **Be verifiable.** `crew doctor` checks that the wiring exists and that a test event wakes the lead DM.
-
-`crew events` reports what changed since the previous call. It is the single signal the wiring triggers on.
+5. **Be verifiable.** `crew doctor` checks that `.crew/crew.toml` records wiring for the harness in use. The self-test is the live check.
 
 Without wiring, everything still works: the lead DM acts when you prompt it.
 
@@ -406,7 +437,7 @@ You never need to edit configuration or prompts. Everything works with defaults,
 
 ### Layout
 
-Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project. The one exception is [harness wiring](#keeping-the-lead-dm-running), which lives where the harness requires it, such as `.claude/` or `.opencode/`, and is recorded in `.crew/crew.toml`.
+Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project. The one exception is [harness wiring](#keeping-the-lead-dm-running) that the lead DM writes itself, which lives where the harness requires it, such as `.claude/` or `.opencode/`. Every harness's wiring is recorded in `.crew/crew.toml`.
 
 ```
 AGENTS.md                 the seed file
@@ -469,7 +500,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | --- | --- |
 | `crew dm claim [--takeover]` | Takes the lead |
 | `crew dm release` | Gives up the lead |
-| `crew events` | Reports what changed since the previous call; the signal for harness wiring |
+| `crew events [--wait [--test]]` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer; one appeal per attempt |
