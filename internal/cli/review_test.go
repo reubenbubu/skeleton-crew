@@ -162,7 +162,7 @@ func (p *devProject) merged(sha string) {
 }
 
 // cleaned checks that the ticket's worktree is gone and its compose project
-// was taken down.
+// was taken down with its built images (#19-AC2).
 func (p *devProject) cleaned() {
 	p.t.Helper()
 	wt := filepath.Join(p.main, worktree)
@@ -172,7 +172,7 @@ func (p *devProject) cleaned() {
 	if got := gitIn(p.t, p.main, "worktree", "list"); strings.Contains(got, ".crew/worktrees") {
 		p.t.Fatalf("worktrees still registered: %s", got)
 	}
-	if last := p.box.calls[len(p.box.calls)-1]; last != wt+" -p crew-1 down --volumes --remove-orphans" {
+	if last := p.box.calls[len(p.box.calls)-1]; last != wt+" -p crew-1 down --volumes --remove-orphans --rmi local" {
 		p.t.Fatalf("last compose call %q", last)
 	}
 }

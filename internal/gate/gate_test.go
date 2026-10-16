@@ -167,7 +167,7 @@ func newRun(b *box, commands map[string]string, log *bytes.Buffer) Run {
 
 var all = map[string]string{"build": "b", "lint": "l", "test": "t", "test-changed": "tc", "run": "r", "health": "h", "e2e": "e"}
 
-// #8-AC1 #8-AC6
+// #8-AC1 #8-AC6 #19-AC1 #19-AC3
 func TestStepsRunInOrder(t *testing.T) {
 	b := &box{}
 	var log bytes.Buffer
@@ -184,7 +184,7 @@ func TestStepsRunInOrder(t *testing.T) {
 		"/gate -p crew-1-gate up -d",
 		"/gate -p crew-1-gate exec -T app sh -c h",
 		"/gate -p crew-1-gate exec -T app sh -c e",
-		"/gate -p crew-1-gate down --volumes --remove-orphans",
+		"/gate -p crew-1-gate down --volumes --remove-orphans --rmi local",
 	}
 	if !slices.Equal(b.calls, want) {
 		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(b.calls, "\n"), strings.Join(want, "\n"))
@@ -205,7 +205,7 @@ func TestStepsLeftOut(t *testing.T) {
 		"/gate -p crew-1-gate down --volumes --remove-orphans",
 		"/gate -p crew-1-gate build",
 		`/gate -p crew-1-gate run --rm -T app sh -c t "$@" sh`,
-		"/gate -p crew-1-gate down --volumes --remove-orphans",
+		"/gate -p crew-1-gate down --volumes --remove-orphans --rmi local",
 	}
 	if !slices.Equal(b.calls, want) {
 		t.Fatalf("calls %q", b.calls)
@@ -232,7 +232,7 @@ func TestStepFails(t *testing.T) {
 		if f.Step != "lint" || f.Reason != c.why || string(f.Output) != "E501 line too long\n" {
 			t.Fatalf("failure %+v", f)
 		}
-		if len(b.calls) != 5 || b.calls[4] != "/gate -p crew-1-gate down --volumes --remove-orphans" {
+		if len(b.calls) != 5 || b.calls[4] != "/gate -p crew-1-gate down --volumes --remove-orphans --rmi local" {
 			t.Fatalf("calls %q", b.calls)
 		}
 	}
@@ -274,7 +274,7 @@ func TestHealth(t *testing.T) {
 	if polls != 6 || slices.ContainsFunc(b.calls, func(c string) bool { return strings.HasSuffix(c, " e") }) {
 		t.Fatalf("%d polls, calls %q", polls, b.calls)
 	}
-	if last := b.calls[len(b.calls)-1]; last != "/gate -p crew-1-gate down --volumes --remove-orphans" {
+	if last := b.calls[len(b.calls)-1]; last != "/gate -p crew-1-gate down --volumes --remove-orphans --rmi local" {
 		t.Fatalf("last call %q", last)
 	}
 }

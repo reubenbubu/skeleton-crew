@@ -159,7 +159,7 @@ func cleanUp(env Env, root, project, wt string) error {
 	if _, err := os.Stat(wt); err != nil {
 		dir = root
 	}
-	out, code, err := env.Compose(dir, "-p", project, "down", "--volumes", "--remove-orphans")
+	out, code, err := env.Compose(dir, "-p", project, "down", "--volumes", "--remove-orphans", "--rmi", "local")
 	if err != nil {
 		return err
 	}

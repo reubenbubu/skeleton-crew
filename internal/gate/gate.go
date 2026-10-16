@@ -192,7 +192,7 @@ type Failure struct {
 // an error only when the container engine could not be run at all.
 func (r Run) Steps() (*Failure, error) {
 	f, err := r.steps()
-	if _, _, _, e := r.step("down", "down", "--volumes", "--remove-orphans"); err == nil {
+	if _, _, _, e := r.step("down", "down", "--volumes", "--remove-orphans", "--rmi", "local"); err == nil {
 		err = e
 	}
 	return f, err

@@ -52,7 +52,7 @@ var duties = map[string][]string{
 		"crew ticket submit", "gate failed", ".crew/logs/",
 		"crew ticket ask", "crew ticket stuck", "failed attempt",
 		"architecture.md", "conventions.md", "ADR", "migration", "never edited",
-		"`.crew/`", "existing worktree",
+		"`.crew/`", "existing worktree", "only a short description", "adds the kind, ticket number and phase",
 	},
 	"reviewer": {
 		"fresh", "crew review <n> --approve", "crew review <n> --reject", "binding",
@@ -63,7 +63,7 @@ var duties = map[string][]string{
 	},
 }
 
-// #10-AC6
+// #10-AC6 #20-AC1
 func TestRulesCoverEveryDuty(t *testing.T) {
 	for role, want := range duties {
 		text := Common

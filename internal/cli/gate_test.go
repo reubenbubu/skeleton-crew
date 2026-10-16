@@ -65,7 +65,7 @@ func gateCalls(dir string, steps ...string) []string {
 	for _, s := range steps {
 		out = append(out, dir+` -p crew-1-gate run --rm -T app sh -c `+s+` "$@" sh`)
 	}
-	return append(out, dir+" -p crew-1-gate down --volumes --remove-orphans")
+	return append(out, dir+" -p crew-1-gate down --volumes --remove-orphans --rmi local")
 }
 
 var pythonSteps = []string{"python -m compileall -q src", "ruff check . && ruff format --check .", "pytest -q"}

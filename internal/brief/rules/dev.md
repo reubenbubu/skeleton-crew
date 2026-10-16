@@ -17,7 +17,7 @@ TDD is mandatory at every testing level. `crew` checks each step by running the 
 - Every test names the criterion it covers, such as `#12-AC1`, in the form `#<n>-AC<k>`, or the risk it covers; the profile's conventions say where. A test without a reason is excess.
 - A test must fail for the right reason: an assertion about the behaviour, not a typo, a syntax error or a missing import. The Reviewer checks the red record.
 - A change with no behaviour, such as documentation, configuration or knowledge files, uses a plain `crew commit "<message>"`. The Reviewer judges whether it really has no behaviour.
-- `crew commit` commits every change in the worktree; there is no staging step. It writes the commit prefix and pushes immediately, so a lost session loses no work. The first commit opens the PR.
+- `crew commit` commits every change in the worktree; there is no staging step. The message is only a short description of the change, such as `"login rejects an unknown email"`; `crew` adds the kind, ticket number and phase, so never write them yourself. It pushes immediately, so a lost session loses no work. The first commit opens the PR.
 - Red and green steps run the profile's fast `test-changed` command. A red step runs it on the test files the commit changes; green and refactor steps run it on every test file the branch has changed since it left `main`. The full suite runs at the gate.
 - `the tests could not run` means the container engine or the shell failed, so no test ran. Fix the environment, or tell the DM with `crew ticket stuck`; it is never a red or a green result.
 - Never rebase, merge `main` into the branch, or push anything yourself. Branches are rebased only at merge time.

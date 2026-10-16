@@ -53,7 +53,7 @@ func TestScaffoldPassesGate(t *testing.T) {
 				t.Fatal("the scaffold has no test file")
 			}
 			project := fmt.Sprintf("crew-profiletest-%s-%d-changed", name, os.Getpid())
-			defer compose.Default()(dir, "-p", project, "down", "--volumes", "--remove-orphans")
+			defer compose.Default()(dir, "-p", project, "down", "--volumes", "--remove-orphans", "--rmi", "local")
 			if out, code, err := compose.ExecIn(compose.Default(), dir, project, p.Commands["test-changed"], tests); err != nil || code != 0 {
 				t.Fatalf("test-changed %v: exit %d %v\n%s", tests, code, err, out)
 			}

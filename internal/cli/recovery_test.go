@@ -142,7 +142,7 @@ func TestTicketFixRefusals(t *testing.T) {
 	p.refused(1, "#1 has no failed deployment", "ticket", "fix", "1", "T", "--lead", p.token)
 }
 
-// #14-AC2
+// #14-AC2 #19-AC2
 func TestStatusRemovesLeftovers(t *testing.T) {
 	p := newDevProject(t)
 	p.start(1, "--tier", "1")
@@ -159,8 +159,8 @@ func TestStatusRemovesLeftovers(t *testing.T) {
 	}
 	wt := filepath.Join(p.main, ".crew", "worktrees")
 	calls := []string{
-		filepath.Join(wt, "feat/7/old-work") + " -p crew-7 down --volumes --remove-orphans",
-		filepath.Join(wt, "gate/7") + " -p crew-7-gate down --volumes --remove-orphans",
+		filepath.Join(wt, "feat/7/old-work") + " -p crew-7 down --volumes --remove-orphans --rmi local",
+		filepath.Join(wt, "gate/7") + " -p crew-7-gate down --volumes --remove-orphans --rmi local",
 	}
 	if !slices.Equal(p.box.calls, calls) {
 		t.Fatalf("compose calls %q", p.box.calls)
