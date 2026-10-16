@@ -136,7 +136,7 @@ func TestStatusForThePM(t *testing.T) {
 	}
 }
 
-// #11-AC3
+// #11-AC3 #14-AC1
 func TestStatusForTheDM(t *testing.T) {
 	p := newTicketProject(t)
 	p.newIssue("Intake", "stage:1:intake")

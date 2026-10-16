@@ -319,3 +319,34 @@ func runTicketUnblock(args []string, env Env) int {
 	}
 	return finish(env, err, false)
 }
+
+func runTicketFix(args []string, env Env) int {
+	fs := flag.NewFlagSet("ticket fix", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "")
+	n, pos, err := leadTicketArgs(fs, args, env, "<title>")
+	if err != nil {
+		return finish(env, err, false)
+	}
+	c, err := client(env)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	fix, err := ticket.Fix(c, n, pos[0])
+	if err != nil {
+		// The DM finishes what a failure after the new ticket left.
+		if fix.Number != 0 && !*asJSON {
+			lines(env.Stdout, fmt.Sprintf("#%d %s", fix.Number, fix.Fields))
+		}
+		return finish(env, err, false)
+	}
+	if *asJSON {
+		err = output.JSON(env.Stdout, struct {
+			Number int            `json:"number"`
+			Stage  string         `json:"stage"`
+			Fix    ticket.Summary `json:"fix"`
+		}{n, "9:done", fix})
+	} else {
+		err = lines(env.Stdout, fmt.Sprintf("#%d %s", fix.Number, fix.Fields), fmt.Sprintf("#%d stage=9:done", n))
+	}
+	return finish(env, err, false)
+}

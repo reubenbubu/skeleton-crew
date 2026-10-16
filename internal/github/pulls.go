@@ -8,16 +8,17 @@ import (
 )
 
 type PullRequest struct {
-	Number    int       `json:"number"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	State     string    `json:"state"`
-	Draft     bool      `json:"draft"`
-	Merged    bool      `json:"merged"` // only filled by PullRequest, not PullRequests
-	Head      Ref       `json:"head"`
-	Base      Ref       `json:"base"`
-	User      User      `json:"user"`
-	CreatedAt time.Time `json:"created_at"`
+	Number    int        `json:"number"`
+	Title     string     `json:"title"`
+	Body      string     `json:"body"`
+	State     string     `json:"state"`
+	Draft     bool       `json:"draft"`
+	Merged    bool       `json:"merged"` // only filled by PullRequest, not PullRequests
+	MergedAt  *time.Time `json:"merged_at"`
+	Head      Ref        `json:"head"`
+	Base      Ref        `json:"base"`
+	User      User       `json:"user"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 type Ref struct {
@@ -65,6 +66,7 @@ type CombinedStatus struct {
 type WorkflowRun struct {
 	ID         int64     `json:"id"`
 	Name       string    `json:"name"`
+	Path       string    `json:"path"` // the workflow file, such as .github/workflows/deploy.yml
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
 	HeadBranch string    `json:"head_branch"`

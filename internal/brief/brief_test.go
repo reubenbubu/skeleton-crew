@@ -37,7 +37,7 @@ var duties = map[string][]string{
 		"crew ticket ask", "answer", "same rank",
 		"crew ticket retry", "top_attempts", "max_tier", "crew ticket unblock", "crew ticket appeal", "one appeal", "crew ticket split", "\"<title>\" \"<title>\"", "not planned",
 		"crew ticket cancel", "crew merge", "6:pending-merge", "No Dev works at stage 6", "origin/<branch>", "merge-conflict", "merged <commit> into main",
-		"deployment", "`fix` ticket", "`high`",
+		"deployment", "`fix` ticket", "`high`", "crew ticket fix", "triage the deployment", "crew status --as dm --lead", "stages 4 to 6",
 		"`git` and `gh` directly", "`decision` comment",
 		"recovery", "4:in-progress", "4:waiting-review", "4:review-rejected", "5:review-approved", "7:merged", "8:deploying",
 		"architecture.md", "conventions.md", "ADR", "size budget", "onboarding",

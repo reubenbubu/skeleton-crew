@@ -16,9 +16,6 @@ import (
 	"github.com/reubenbubu/skeleton-crew/internal/ticket"
 )
 
-// deployWorkflows are the paths of a deployment workflow.
-var deployWorkflows = []string{".github/workflows/deploy.yml", ".github/workflows/deploy.yaml"}
-
 func runMerge(args []string, env Env) int {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	token := leadFlag(fs)
@@ -106,7 +103,7 @@ func runMerge(args []string, env Env) int {
 	if err != nil {
 		return done(err, false)
 	}
-	deploy := slices.ContainsFunc(files, func(f string) bool { return slices.Contains(deployWorkflows, f) })
+	deploy := slices.ContainsFunc(files, func(f string) bool { return slices.Contains(ticket.DeployWorkflows, f) })
 	stage, err := ticket.Merged(c, n, deploy)
 	out = append(out, "merged "+sha[:7]+" into main")
 	if err != nil {
@@ -114,7 +111,7 @@ func runMerge(args []string, env Env) int {
 	}
 	out = append(out, fmt.Sprintf("#%d stage=%s", n, stage))
 	wt := path.Join(".crew", "worktrees", branch)
-	if err := cleanUp(env, r, n, filepath.Join(r, filepath.FromSlash(wt))); err != nil {
+	if err := cleanUp(env, r, compose.Project(n), filepath.Join(r, filepath.FromSlash(wt))); err != nil {
 		return done(err, false)
 	}
 	if *asJSON {
@@ -155,14 +152,13 @@ func rebase(root string, repo *git.Repo, number int, branch, base, sha string) (
 	return head, wt.Push(head, branch, sha)
 }
 
-// cleanUp takes down ticket number's compose project, with its volumes, and
-// removes its worktree at wt.
-func cleanUp(env Env, root string, number int, wt string) error {
+// cleanUp takes down the compose project called project, with its volumes,
+// and removes the worktree at wt, where the project runs.
+func cleanUp(env Env, root, project, wt string) error {
 	dir := wt
 	if _, err := os.Stat(wt); err != nil {
 		dir = root
 	}
-	project := compose.Project(number)
 	out, code, err := env.Compose(dir, "-p", project, "down", "--volumes", "--remove-orphans")
 	if err != nil {
 		return err

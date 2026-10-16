@@ -71,6 +71,7 @@ type issue struct {
 type pull struct {
 	head, base    string
 	draft, merged bool
+	mergedAt      time.Time
 }
 
 type label struct{ name, color, description string }
@@ -102,9 +103,9 @@ type status struct {
 }
 
 type run struct {
-	id                                    int64
-	name, branch, sha, status, conclusion string
-	created                               time.Time
+	id                                          int64
+	name, path, branch, sha, status, conclusion string
+	created                                     time.Time
 }
 
 // New returns an empty fake repository, given as owner/name, whose
@@ -273,7 +274,7 @@ func (g *GitHub) SetBranch(name, sha string) {
 	g.branches[name] = sha
 	for _, i := range g.issues {
 		if i.pull != nil && i.state == "open" && i.pull.base == name && sha != "" && g.branches[i.pull.head] == sha {
-			i.pull.merged, i.state = true, "closed"
+			i.pull.merged, i.pull.mergedAt, i.state = true, g.clock.Now(), "closed"
 		}
 	}
 }
@@ -303,11 +304,31 @@ func (g *GitHub) SetIssueLabels(number int, names ...string) {
 	}
 }
 
-// AddWorkflowRun records a workflow run on commit sha of branch.
-func (g *GitHub) AddWorkflowRun(name, branch, sha, status, conclusion string) {
+// AddWorkflowRun records a run of workflow name on commit sha of branch and
+// returns its ID. The workflow's file is .github/workflows/<name>.yml, or
+// .github/workflows/<name> when name ends in .yml or .yaml.
+func (g *GitHub) AddWorkflowRun(name, branch, sha, status, conclusion string) int64 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.runs = append(g.runs, &run{id: g.id(), name: name, branch: branch, sha: sha, status: status, conclusion: conclusion, created: g.clock.Now()})
+	path := ".github/workflows/" + name
+	if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+		path += ".yml"
+	}
+	id := g.id()
+	g.runs = append(g.runs, &run{id: id, name: strings.TrimSuffix(strings.TrimSuffix(name, ".yml"), ".yaml"), path: path, branch: branch, sha: sha, status: status, conclusion: conclusion, created: g.clock.Now()})
+	return id
+}
+
+// SetWorkflowRun sets the status and conclusion of run id, as GitHub does
+// while the run goes on or when it is run again.
+func (g *GitHub) SetWorkflowRun(id int64, status, conclusion string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, r := range g.runs {
+		if r.id == id {
+			r.status, r.conclusion = status, conclusion
+		}
+	}
 }
 
 // knownCommit reports whether a branch points at sha.
@@ -438,11 +459,18 @@ func (g *GitHub) pullJSON(i *issue) map[string]any {
 	return map[string]any{
 		"id": i.id, "node_id": fmt.Sprintf("PR_kwDOfake%d", i.id), "number": i.number,
 		"url": g.url("pulls/%d", i.number), "title": i.title, "body": nullable(i.body),
-		"state": i.state, "draft": i.pull.draft, "merged": i.pull.merged, "user": user(),
+		"state": i.state, "draft": i.pull.draft, "merged": i.pull.merged, "merged_at": nullTime(i.pull.mergedAt), "user": user(),
 		"head":       map[string]any{"ref": i.pull.head, "sha": g.branches[i.pull.head], "label": owner + ":" + i.pull.head},
 		"base":       map[string]any{"ref": i.pull.base, "sha": g.branches[i.pull.base], "label": owner + ":" + i.pull.base},
 		"created_at": ts(i.created),
 	}
+}
+
+func nullTime(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return ts(t)
 }
 
 func nullable(s string) any {
@@ -1058,7 +1086,7 @@ func (g *GitHub) listRuns(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		out = append(out, map[string]any{
-			"id": run.id, "node_id": "WFR_kwDOfake", "name": run.name, "head_branch": run.branch,
+			"id": run.id, "node_id": "WFR_kwDOfake", "name": run.name, "path": run.path, "head_branch": run.branch,
 			"head_sha": run.sha, "event": "push", "status": run.status, "conclusion": nullable(run.conclusion),
 			"html_url":   "https://github.com/" + g.repo + "/actions/runs/" + strconv.FormatInt(run.id, 10),
 			"created_at": ts(run.created),

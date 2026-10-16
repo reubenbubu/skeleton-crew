@@ -141,7 +141,7 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 - Every stage has one owner and an expected dwell time. `crew status` flags tickets that sit too long, for example `#12 4:waiting-review since 2026-10-15T09:12Z: no reviewer`. This catches dropped handoffs without any background process.
 - **Merge conflicts** at `6:pending-merge` stay at stage 6. The DM resolves trivial conflicts such as lockfiles and version lines itself.
 - **Anything else at stage 6 goes forward through a new ticket:** a conflict that is not trivial, or a gate that fails after the rebase. No Dev works at stage 6, because stages never go back to 4 and Devs never rebase. The DM cancels the ticket and opens a new one with `crew ticket new`, at `2:drafting`. Its `Assumptions` name the cancelled ticket and its branch, `origin/<branch>`, which the new ticket's Dev may read to reuse the work. The PM copies the goal and writes the criteria under the new number. Tests that name the cancelled ticket's criteria are flagged by the gate as `cancelled`, and the new ticket's Dev renames them to the new criteria, with failing tests first as usual.
-- **Deployment failures:** if the pipeline or environment failed, the DM triages it and asks you only for credentials. If the code caused it, the original ticket goes to `9:done` and the DM opens a linked `fix` ticket at `high`. Fixes always go forward.
+- **Deployment failures:** if the pipeline or environment failed, the DM triages it and asks you only for credentials. If the code caused it, the original ticket goes to `9:done` and the DM opens a linked `fix` ticket at `high` with `crew ticket fix`. Fixes always go forward.
 
 ### Comments and terse views
 
@@ -183,11 +183,11 @@ $ crew ticket list
 
 ## Status
 
-`crew status [--as <role>]` shows each role what needs its attention. The role is `pm` or `dm`; without `--as`, it shows only what concerns everyone. The PM runs `crew status --as pm` and the DM `crew status --as dm` at the start of every session.
+`crew status [--as <role>]` shows each role what needs its attention. The role is `pm` or `dm`; without `--as`, it shows only what concerns everyone. The PM runs `crew status --as pm` and the DM `crew status --as dm` at the start of every session. The lead DM adds `--lead <token>`.
 
 - **Everyone:** questions waiting for you. Each `blocked` ticket is listed with the time it was blocked and the first line of its latest `question` comment that is not a Dev's. A ticket that reaches the escalation limit is blocked with such a question.
 - **PM:** new `1:intake` tickets, tickets in `2:drafting`, and DM decisions the PM has not acknowledged. `crew ticket ack <n>` posts a `log` comment `ack` as `pm`; a `decision` comment by `dm` is acknowledged once such a comment follows it on its ticket.
-- **Lead DM:** unanswered Dev questions, the board, stale handoffs and recovery proposals. A Dev question is unanswered while no `answer` comment follows it. The board is every open ticket past `2:drafting`. Recovery proposals are described in [Session recovery](#session-recovery). It also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status.
+- **Lead DM:** unanswered Dev questions, the board, stale handoffs and recovery proposals. A Dev question is unanswered while no `answer` comment follows it. The board is every open ticket past `2:drafting`. Recovery proposals are described in [Session recovery](#session-recovery). With `--lead <token>`, it also advances `7:merged` through `8:deploying` to `9:done` from the deployment workflow's status, and removes the worktrees and compose projects that tickets left behind; without the token it changes neither.
 - **Stale handoffs:** each role sees the stale tickets at the stages it owns, the PM `1:intake` and `2:drafting` and the DM the rest. A ticket is stale when it has been at its stage longer than the time below, counted from the last time it reached the stage. A `blocked` ticket is never stale, because it waits for you.
 
 | Stage | Stale after | Flag |
@@ -545,7 +545,12 @@ Devs and Reviewers run inside the lead DM's harness session and stop when it end
 | `6:pending-merge` | Run the gate again if `main` has moved, then merge. |
 | `7:merged`, `8:deploying` | Read the deployment workflow's status and advance. |
 
-Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed.
+`crew status --as dm --lead <token>` does the deterministic part itself:
+
+- **Deployments.** It reads the newest run of the deployment workflow on the ticket's merged commit, which is the head commit of its merged PR. Once a run exists, the ticket moves to `8:deploying`. When the run succeeds, the ticket moves to `9:done` and its issue is closed, through `8:deploying` if status had not yet seen the run. Until then, the proposal is `wait for the deployment`. A run that finished without success leaves the ticket at `8:deploying` with the proposal `triage the deployment: <conclusion>`, such as `failure` or `cancelled`. The DM triages it: a pipeline or environment problem is fixed and the run started again, and status advances the ticket once it succeeds; a problem in the code goes to `crew ticket fix <n> "<title>"`, which opens a `fix` ticket at `high` and `2:drafting`, posts a `log` comment on each ticket naming the other, and moves the original ticket to `9:done` and closes it. `crew ticket fix` refuses a ticket whose newest deployment run has not finished without success.
+- **Leftovers.** Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed. `crew` finds them through the worktrees under `.crew/worktrees/`: a Dev's worktree runs compose project `crew-<n>`, a gate worktree `crew-<n>-gate`, and a merge worktree none. Each project goes down with `down --volumes` before its worktree is removed, so a project is never left without the worktree that finds it. A removal that fails stops the removals; status still shows everything else and then reports the failure. Each ticket cleaned up is a line in `changes`, such as `#12 removed .crew/worktrees/feat/12/login-with-email crew-12`.
+
+Without `--lead`, status changes neither, and proposes `advance from the deployment status` for tickets at `7:merged` and `8:deploying`.
 
 ## Profiles and containers
 
@@ -584,7 +589,7 @@ The application always runs in containers, never directly on the host. Agents ru
 
 ## Deployment
 
-Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. It is `.github/workflows/deploy.yml` or `.github/workflows/deploy.yaml`, and `crew` looks for it in the merged commit. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`. Without a deployment workflow, merging finishes the ticket.
+Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. It is `.github/workflows/deploy.yml` or `.github/workflows/deploy.yaml`, and `crew` looks for it in the merged commit. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`, as described in [Session recovery](#session-recovery). Without a deployment workflow, merging finishes the ticket.
 
 ## Prompts and project knowledge
 
@@ -692,7 +697,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 ### Lead DM
 
-`crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge`, `crew events`, `crew dm wiring` and `crew dm release` are lead-only. Each takes `--lead <token>` and is refused with `not-lead` without the lead's token.
+`crew ticket start`, `retry`, `appeal`, `split`, `cancel` and `fix`, `crew merge`, `crew events`, `crew dm wiring` and `crew dm release` are lead-only, as is `crew status` with `--lead`. Each takes `--lead <token>` and is refused with `not-lead` without the lead's token.
 
 | Command | Stage change |
 | --- | --- |
@@ -707,6 +712,8 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew ticket split <n> "<title>" "<title>"...` | Creates one child ticket per title, at least two, at `2:drafting`, for the PM to complete, and cancels the parent |
 | `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`, and to `9:done` without a deployment workflow; rebases and gates again if `main` moved, then fast-forwards `main`. Also accepts a ticket at `6:pending-merge` |
 | `crew ticket cancel <n>` | Any open stage to `0:cancelled`, and closes the issue as not planned |
+| `crew ticket fix <n> "<title>"` | For a deployment that failed because of the code: opens a `fix` ticket at `high` and `2:drafting`, and moves `n` from `7:merged` or `8:deploying` to `9:done` and closes it |
+| `crew status --as dm --lead <token>` | The DM's status; also advances deployments and removes leftover worktrees and compose projects; see [Session recovery](#session-recovery) |
 
 ### Dev
 

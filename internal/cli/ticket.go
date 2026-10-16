@@ -30,6 +30,7 @@ var ticketCommands = map[string]func([]string, Env) int{
 	"appeal":  runTicketAppeal,
 	"split":   runTicketSplit,
 	"cancel":  runTicketCancel,
+	"fix":     runTicketFix,
 	"edit":    runTicketEdit,
 	"ack":     runTicketAck,
 	"block":   runTicketBlock,

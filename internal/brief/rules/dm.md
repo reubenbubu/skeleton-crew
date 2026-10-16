@@ -10,7 +10,7 @@ Several DM sessions may be open at once, but only one, the lead, acts on work.
 
 - Start every session with `crew dm claim`. If no one holds the lead, you get it and its token, in a line such as `lead 3f9a0c1e5b7d42a8961e0f3c2b4d6a81 claimed 2026-10-16T09:12Z`. Keep the token: every lead-only command takes it as `--lead <token>`.
 - If the claim is refused because another session holds the lead, you are a conversational DM. Run `crew dm claim --takeover` only when the user confirms it, for example when the old lead session is gone. A lead that has lost its own token takes over from itself the same way. Never decide on your own that another session is dead. A takeover makes the old token stop working at once, so the old lead's next lead-only command gets `not-lead`.
-- Lead-only commands: `crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge`, `crew events`, `crew dm wiring` and `crew dm release`. When one is refused with `not-lead`, another session has taken the lead: continue as a conversational DM; no work is lost, because all state is on GitHub. A refusal `not-lead: no lead; run crew dm claim` means no one holds the lead; run `crew dm claim` again.
+- Lead-only commands: `crew ticket start`, `retry`, `appeal`, `split`, `cancel` and `fix`, `crew merge`, `crew events`, `crew dm wiring`, `crew dm release`, and `crew status` with `--lead`. When one is refused with `not-lead`, another session has taken the lead: continue as a conversational DM; no work is lost, because all state is on GitHub. A refusal `not-lead: no lead; run crew dm claim` means no one holds the lead; run `crew dm claim` again.
 - A command refused with `stage-changed` lost a race: another writer moved the ticket first. Read the ticket again and act on its new stage.
 - When the lead session ends normally, run `crew dm release --lead <token>`.
 
@@ -20,7 +20,7 @@ The recommended setup is one lead DM session that does the work, and a conversat
 
 ## Every session
 
-1. Run `crew dm claim`, then `crew status --as dm`. It shows unanswered Dev questions, the board, stale handoffs and one recovery proposal per ticket. It also advances `7:merged` tickets through `8:deploying` to `9:done` from the deployment workflow's status.
+1. Run `crew dm claim`, then `crew status --as dm`, adding `--lead <token>` as lead. It shows unanswered Dev questions, the board, stale handoffs and one recovery proposal per ticket. With `--lead`, it also advances `7:merged` tickets through `8:deploying` to `9:done` from the deployment workflow's status, and removes the worktrees and compose projects of tickets no longer in stages 4 to 6. Run it again whenever you want to see the whole state.
 2. As lead, check the harness wiring, then act on the recovery proposals and the board.
 
 ## Harness wiring
@@ -87,10 +87,10 @@ A review rejection, or a Dev that runs `crew ticket stuck`, is a failed attempt.
 
 ## Deployment
 
-`crew` never deploys. A deployment workflow in `.github/workflows/` deploys `main`, and `crew status` moves tickets through `8:deploying` to `9:done` from its status.
+`crew` never deploys. A deployment workflow in `.github/workflows/` deploys `main`, and `crew status --as dm --lead <token>` moves tickets through `8:deploying` to `9:done` from its status. A run that finished without success shows as the proposal `triage the deployment: <conclusion>`.
 
-- If the pipeline or the environment failed, triage it. Ask the user only for credentials.
-- If the code caused it, the original ticket goes to `9:done`, and you open a linked `fix` ticket at `high`. Fixes always go forward.
+- If the pipeline or the environment failed, triage it and start the run again; status finishes the ticket once it succeeds. Ask the user only for credentials.
+- If the code caused it, run `crew ticket fix <n> "<title>" --lead <token>`. It opens a linked `fix` ticket at `high` and `2:drafting` for the PM to complete, and moves the original ticket to `9:done`. Fixes always go forward.
 
 ## Session recovery
 
@@ -103,9 +103,9 @@ Devs and Reviewers stop when the lead session ends. GitHub holds the full state,
 | `4:review-rejected` | Start a Dev one rank up, as normal escalation. |
 | `5:review-approved` | Queue the merge. |
 | `6:pending-merge` | Run `crew merge` again; it gates again if `main` has moved. |
-| `7:merged`, `8:deploying` | Read the deployment workflow's status and advance. |
+| `7:merged`, `8:deploying` | `crew status --as dm --lead <token>` reads the deployment workflow's status and advances; triage a failed run. |
 
-Worktrees and compose projects of tickets no longer in stages 4 to 6 are removed.
+`crew status --as dm --lead <token>` removes the worktrees and compose projects of tickets no longer in stages 4 to 6. If a removal fails, it reports the failure after the status; handle it and run status again.
 
 ## Exceptions
 

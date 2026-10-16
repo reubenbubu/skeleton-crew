@@ -217,7 +217,7 @@ func TestWorkflowRuns(t *testing.T) {
 	fake.AddWorkflowRun("deploy", "main", "aaa", "completed", "success")
 	fake.AddWorkflowRun("deploy", "main", "bbb", "in_progress", "")
 	got := must[[]github.WorkflowRun](t)(c.WorkflowRuns("bbb"))
-	if len(got) != 1 || got[0].Name != "deploy" || got[0].Status != "in_progress" || got[0].Conclusion != "" || got[0].HeadSHA != "bbb" {
+	if len(got) != 1 || got[0].Name != "deploy" || got[0].Path != ".github/workflows/deploy.yml" || got[0].Status != "in_progress" || got[0].Conclusion != "" || got[0].HeadSHA != "bbb" {
 		t.Fatalf("runs %+v", got)
 	}
 }

@@ -88,8 +88,9 @@ type Status struct {
 
 // ReadStatus labels new issues 1:intake, closes finished parents, and
 // returns what needs the attention of role, which is "pm", "dm" or "" for
-// what concerns everyone.
-func ReadStatus(c *github.Client, role string, now time.Time) (Status, error) {
+// what concerns everyone. For the lead DM, when lead is true, it also
+// advances the tickets at 7:merged and 8:deploying from their deployment.
+func ReadStatus(c *github.Client, role string, lead bool, now time.Time) (Status, error) {
 	var s Status
 	issues, err := c.Issues("open")
 	if err != nil {
@@ -112,6 +113,37 @@ func ReadStatus(c *github.Client, role string, now time.Time) (Status, error) {
 		if kept != nil {
 			open = append(open, *kept)
 		}
+	}
+
+	deploys := map[int]string{}
+	if role == "dm" && lead {
+		var kept []github.Issue
+		for _, i := range open {
+			f := fieldsOf(i)
+			if f.Stage != "7:merged" && f.Stage != "8:deploying" {
+				kept = append(kept, i)
+				continue
+			}
+			ch, stage, action, err := advance(c, i, f)
+			if err != nil {
+				return s, err
+			}
+			if ch != "" {
+				s.Changes = append(s.Changes, Change{i.Number, ch})
+			}
+			if stage == "9:done" {
+				continue
+			}
+			i.Labels = slices.Clone(i.Labels)
+			for k, l := range i.Labels {
+				if l.Name == "stage:"+f.Stage {
+					i.Labels[k].Name = "stage:" + stage
+				}
+			}
+			deploys[i.Number] = action
+			kept = append(kept, i)
+		}
+		open = kept
 	}
 
 	var blocked []github.Issue
@@ -176,7 +208,11 @@ func ReadStatus(c *github.Client, role string, now time.Time) (Status, error) {
 				unanswered[i.Number] = q
 				s.DevQuestions = append(s.DevQuestions, Note{i.Number, q.At, firstLine(q.Text)})
 			}
-			if p := propose(f, q != nil); p != "" && !f.Blocked {
+			p := propose(f, q != nil)
+			if a, ok := deploys[i.Number]; ok {
+				p = a
+			}
+			if p != "" && !f.Blocked {
 				s.Recovery = append(s.Recovery, Proposal{i.Number, f.Stage, p})
 			}
 		}
