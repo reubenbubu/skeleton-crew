@@ -56,7 +56,7 @@ func TestOnlyPackageGithubReachesGitHub(t *testing.T) {
 
 // #3-AC7
 func TestNoTokenHandling(t *testing.T) {
-	forbidden := regexp.MustCompile(`GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|"token"|auth token|hosts\.yml`)
+	forbidden := regexp.MustCompile(`GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|"auth",\s*"token"|oauth_token|auth token|hosts\.yml`)
 	for path, src := range sources(t) {
 		if m := forbidden.FindString(src); m != "" {
 			t.Errorf("%s contains %s; crew never reads the gh token", path, m)

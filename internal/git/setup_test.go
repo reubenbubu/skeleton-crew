@@ -194,3 +194,22 @@ func TestHasBranch(t *testing.T) {
 		t.Fatalf("not a repo: %v", err)
 	}
 }
+
+// #6-AC7
+func TestMainRoot(t *testing.T) {
+	dir := t.TempDir()
+	run(t, dir, "init", "-q")
+	run(t, dir, "commit", "-q", "--allow-empty", "-m", "first")
+	wt := filepath.Join(dir, ".crew", "worktrees", "a")
+	run(t, dir, "worktree", "add", "-q", "-b", "a", wt)
+	sub := filepath.Join(dir, "sub")
+	os.Mkdir(sub, 0o755)
+	for _, d := range []string{dir, sub, wt} {
+		if root, err := MainRoot(d); err != nil || root != dir {
+			t.Fatalf("%s: got %q %v", d, root, err)
+		}
+	}
+	if root, err := MainRoot(t.TempDir()); err != nil || root != "" {
+		t.Fatalf("outside a repository: got %q %v", root, err)
+	}
+}

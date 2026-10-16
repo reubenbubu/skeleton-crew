@@ -136,7 +136,8 @@ func Ready(c *github.Client, number int) error {
 }
 
 // move changes the stage of ticket number from to to, after check, if any,
-// accepts the issue. Each caller allows only a forward move.
+// accepts the issue, and only if the ticket is still at from. Each caller
+// allows only a forward move.
 func move(c *github.Client, number int, from, to string, check func(github.Issue) error) (github.Issue, error) {
 	if stageRank(to) < stageRank(from) {
 		panic("backward stage move: " + from + " to " + to)
@@ -145,25 +146,46 @@ func move(c *github.Client, number int, from, to string, check func(github.Issue
 	if err != nil {
 		return i, err
 	}
-	switch f.Stage {
-	case from:
-	case "":
-		return i, fmt.Errorf("#%d has no stage, not %s", number, from)
-	default:
-		return i, fmt.Errorf("#%d is at %s, not %s", number, f.Stage, from)
+	if f.Stage != from {
+		return i, stageChanged(number, f.Stage, from)
 	}
 	if check != nil {
 		if err := check(i); err != nil {
 			return i, err
 		}
 	}
-	// The new stage goes on first, so a failure in between leaves two
-	// stages, which crew reports, never none.
+	// GitHub has no conditional label write, so the removal of the old stage
+	// is the check-and-set: of two moves that race, only one removes it. The
+	// new stage goes on first, so a failure in between leaves two stages,
+	// which crew reports, never none.
 	if _, err := c.AddLabels(number, "stage:"+to); err != nil {
 		return i, err
 	}
-	_, err = c.RemoveLabel(number, "stage:"+from)
-	return i, err
+	if took, err := c.TakeLabel(number, "stage:"+from); took || err != nil {
+		return i, err
+	}
+	// Another writer moved the ticket since the read. Unless it made the
+	// same move, the new stage is this move's alone and comes off again.
+	i, f, err = get(c, number)
+	if err != nil {
+		return i, err
+	}
+	stages := strings.Split(f.Stage, ",")
+	if len(stages) > 1 && slices.Contains(stages, to) {
+		if _, err := c.TakeLabel(number, "stage:"+to); err != nil {
+			return i, err
+		}
+		stages = slices.DeleteFunc(stages, func(s string) bool { return s == to })
+	}
+	return i, stageChanged(number, strings.Join(stages, ","), from)
+}
+
+// stageChanged refuses a move from stage from of a ticket that is at stage.
+func stageChanged(number int, stage, from string) error {
+	if stage == "" {
+		return fmt.Errorf("stage-changed: #%d has no stage, not %s", number, from)
+	}
+	return fmt.Errorf("stage-changed: #%d is at %s, not %s", number, stage, from)
 }
 
 // stageRank returns the number of a stage such as 4:in-progress.

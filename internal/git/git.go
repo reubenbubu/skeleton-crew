@@ -256,3 +256,19 @@ func (r *Repo) HasBranch(name string) (bool, error) {
 	_, err := git(r.Dir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+name+"^{commit}")
 	return err == nil, nil
 }
+
+// MainRoot returns the root of the main checkout of the repository that
+// contains dir, even from a linked worktree, or "" when dir is in no
+// repository.
+func MainRoot(dir string) (string, error) {
+	if top, err := Toplevel(dir); top == "" || err != nil {
+		return "", err
+	}
+	out, err := git(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	// The main worktree is always listed first.
+	first, _, _ := strings.Cut(out, "\n")
+	return strings.TrimPrefix(first, "worktree "), nil
+}

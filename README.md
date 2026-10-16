@@ -50,7 +50,7 @@ crew init --profile <name> [--harness <name>] [--repo <owner>/<name>] [--public]
 
 1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock*` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md` and the files `crew init` writes.
 5. **Commit:** commits only the files it created and pushes them to `main`, with the message `Set up Skeleton Crew`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -348,11 +348,18 @@ The local repository always matches GitHub.
 
 You can have several DM sessions open at once, but only one of them, the **lead**, acts on work.
 
-- A DM session starts with `crew dm claim`. If no one holds the lead, it gets it, along with a token that its lead-only commands carry.
-- The lead is recorded in `.crew/lead.lock`, a local file that is not committed. All DM sessions of a project run in the same checkout, because worktrees, compose projects and gate runs are local too.
-- Only the lead starts Devs and Reviewers, merges, cancels and runs recovery. `crew` refuses these from any other session with `not-lead`.
+- A DM session starts with `crew dm claim`. If no one holds the lead, it gets it, along with a token, and prints one line such as `lead 3f9a0c1e5b7d42a8961e0f3c2b4d6a81 claimed 2026-10-16T09:12Z`. Every lead-only command carries the token as `--lead <token>`. While another session holds the lead, a claim is refused with `lead held since 2026-10-16T09:12Z; crew dm claim --takeover takes it once the user confirms`.
+- The lead is recorded in `.crew/lead.lock` in the main checkout, a local file that is not committed. All DM sessions of a project run in the same checkout, because worktrees, compose projects and gate runs are local too. The file holds the token and the claim time:
+
+  ```toml
+  token = "3f9a0c1e5b7d42a8961e0f3c2b4d6a81"
+  claimed = "2026-10-16T09:12:44Z"
+  ```
+
+  A claim writes a temporary file and links it into place, which fails if a lock already exists, so of two claims at the same moment only one wins, and no one ever reads a half-written lock. A takeover renames its file over the old lock. Only one claim at a time replaces an unreadable lock: it holds `.crew/lead.lock.repair` while it reads the lock again and replaces it, and any other claim meanwhile is refused and can simply run again. A takeover removes a guard that a dead claim left behind.
+- Only the lead starts Devs and Reviewers, merges, cancels and runs recovery. `crew` refuses these from any other session with one line that starts with `not-lead`, such as `not-lead: the lead was claimed at 2026-10-16T09:12Z by another session` or `not-lead: no lead; run crew dm claim`.
 - Every other DM is **conversational**. It discusses implementation with you, records decisions, creates tickets from your requests and opens knowledge-only PRs. It never starts or merges work.
-- `crew dm release` gives up the lead when the lead session ends normally.
+- `crew dm release --lead <token>` gives up the lead when the lead session ends normally. Only the lead can release it.
 
 ### The lead can never lock the system
 
@@ -362,7 +369,9 @@ No internal mechanism may stop the crew from making progress. For the lead this 
 - A lead that has lost its own token takes over from itself the same way.
 - If the old lead was still alive, its next lead-only command gets `not-lead` and it continues as a conversational DM. No work is lost, because all state is on GitHub.
 - Every state change is a check-and-set on the stage label, such as "move #12 from 5 to 6 only if it is still at 5". If two DMs race during a takeover, one succeeds and the other gets `stage-changed`. Nothing happens twice.
-- A missing or unreadable lock file counts as "no lead", with a warning, so the next claim succeeds.
+- GitHub has no conditional label write, so the removal of the old stage label is the check: of two moves that race, only one removes it. A move reads the stage, adds the new stage label, then removes the old one. If the old one is already gone, another writer moved the ticket first: the move takes its own new label off again, unless the other writer made the same move, and is refused. Because the new label goes on first, a ticket is never without a stage, even for a moment.
+- A move from a stage the ticket is not at is refused with one line that starts with `stage-changed`, such as `stage-changed: #12 is at 6:pending-merge, not 5:review-approved`, whether the stage changed before the read or during the move.
+- A missing or unreadable lock file counts as "no lead", so the next claim succeeds. An unreadable one also prints a warning, such as `warning: .crew/lead.lock unreadable: invalid token; counted as no lead`.
 - `crew` never decides on its own that a session is dead. Nothing moves without an open session, and an open session means you are there to confirm.
 
 ## Keeping the lead DM running
@@ -548,10 +557,12 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 
 ### Lead DM
 
+`crew ticket start`, `retry`, `appeal`, `split` and `cancel`, `crew merge` and `crew dm release` are lead-only. Each takes `--lead <token>` and is refused with `not-lead` without the lead's token.
+
 | Command | Stage change |
 | --- | --- |
-| `crew dm claim [--takeover]` | Takes the lead |
-| `crew dm release` | Gives up the lead |
+| `crew dm claim [--takeover]` | Takes the lead and prints its token |
+| `crew dm release --lead <token>` | Gives up the lead |
 | `crew events [--wait [--test]]` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
 | `crew ticket next` | Lists eligible tickets in order |
 | `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress`; creates the worktree, branch, compose project and a draft PR |

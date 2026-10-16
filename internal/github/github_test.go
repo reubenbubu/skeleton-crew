@@ -364,3 +364,19 @@ func TestIssueEvents(t *testing.T) {
 		t.Fatalf("events\n got %q\nwant %q", got, want)
 	}
 }
+
+// #6-AC6: the removal of a label that is already gone is how a stage move
+// finds out it lost a race, so it is a result, not a failure.
+func TestTakeLabel(t *testing.T) {
+	c, _ := setup(t)
+	must[github.Issue](t)(c.CreateIssue(github.NewIssue{Title: "t", Labels: []string{"stage:3:eligible"}}))
+	if took, err := c.TakeLabel(1, "stage:3:eligible"); !took || err != nil {
+		t.Fatalf("first: %v %v", took, err)
+	}
+	if took, err := c.TakeLabel(1, "stage:3:eligible"); took || err != nil {
+		t.Fatalf("second: %v %v", took, err)
+	}
+	if _, err := c.Issue(1); err != nil {
+		t.Fatalf("client unusable after a label that was gone: %v", err)
+	}
+}

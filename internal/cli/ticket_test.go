@@ -163,7 +163,7 @@ func TestStageMovesOnlyForward(t *testing.T) {
 			if s.Label != "" {
 				at = "is at " + strings.TrimPrefix(s.Label, "stage:")
 			}
-			p.refused(1, fmt.Sprintf("#%d %s, not %s", n, at, cmd.from), "ticket", cmd.name, fmt.Sprint(n))
+			p.refused(1, fmt.Sprintf("stage-changed: #%d %s, not %s", n, at, cmd.from), "ticket", cmd.name, fmt.Sprint(n))
 		}
 	}
 	if w := p.writes()[before:]; len(w) != 0 {
@@ -419,7 +419,7 @@ func TestDuplicateLabelsAreShown(t *testing.T) {
 	if out := p.ok("ticket", "show", "1"); !strings.HasPrefix(out, "#1 Login\nstage=2:drafting,3:eligible tier=1,2\n") {
 		t.Fatalf("got %q", out)
 	}
-	p.refused(1, "#1 is at 2:drafting,3:eligible, not 2:drafting", "ticket", "ready", "1")
+	p.refused(1, "stage-changed: #1 is at 2:drafting,3:eligible, not 2:drafting", "ticket", "ready", "1")
 }
 
 // #5-AC5: only a marker crew writes makes a comment a crew comment, and a
@@ -436,4 +436,60 @@ func TestCommentMarkers(t *testing.T) {
 	if out := p.ok("ticket", "show", "1"); !strings.HasSuffix(out, want) {
 		t.Fatalf("got\n%s\nwant suffix\n%s", out, want)
 	}
+}
+
+// readyTicket creates ticket 1 at 2:drafting with a body that is ready.
+func readyTicket(p *project) {
+	p.t.Helper()
+	p.ok("ticket", "new", "Login")
+	p.setBody(1, "## Goal\nLog in.\n## Acceptance criteria\n- [#1-AC1] A known email gets a link.\n")
+}
+
+// before runs race once, just before crew's first request with method to
+// path under ticket 1's labels, as another writer would.
+func before(p *project, method, path string, race func()) {
+	done := false
+	p.fake.Hook = func(w http.ResponseWriter, r *http.Request) bool {
+		if !done && r.Method == method && r.URL.Path == "/repos/"+p.fullName+"/issues/1/labels"+path {
+			done = true
+			race()
+		}
+		return false
+	}
+}
+
+// #6-AC6: of two identical moves that race, exactly one succeeds.
+func TestRacingMovesOneSucceeds(t *testing.T) {
+	p := newTicketProject(t)
+	readyTicket(p)
+	// The other move runs between this one's read and its first write.
+	before(p, http.MethodPost, "", func() { p.ok("ticket", "ready", "1") })
+	p.refused(1, "stage-changed: #1 is at 3:eligible, not 2:drafting", "ticket", "ready", "1")
+	if got := p.fake.IssueLabels(1); !slices.Equal(got, []string{"priority:medium", "kind:feat", "stage:3:eligible"}) {
+		t.Fatalf("labels %q", got)
+	}
+}
+
+// #6-AC6: a move that loses a race to a different move takes its own stage
+// back off.
+func TestMoveThatLosesARaceUndoesItself(t *testing.T) {
+	p := newTicketProject(t)
+	readyTicket(p)
+	before(p, http.MethodDelete, "/stage:2:drafting", func() {
+		// Another writer cancels the ticket.
+		p.gh().AddLabels(1, "stage:0:cancelled")
+		p.gh().RemoveLabel(1, "stage:2:drafting")
+	})
+	p.refused(1, "stage-changed: #1 is at 0:cancelled, not 2:drafting", "ticket", "ready", "1")
+	if got := p.fake.IssueLabels(1); !slices.Equal(got, []string{"priority:medium", "kind:feat", "stage:0:cancelled"}) {
+		t.Fatalf("labels %q", got)
+	}
+}
+
+// #6-AC6: a ticket whose old stage another writer removed keeps a stage.
+func TestMoveWhenTheStageWasRemoved(t *testing.T) {
+	p := newTicketProject(t)
+	readyTicket(p)
+	before(p, http.MethodDelete, "/stage:2:drafting", func() { p.gh().RemoveLabel(1, "stage:2:drafting") })
+	p.refused(1, "stage-changed: #1 is at 3:eligible, not 2:drafting", "ticket", "ready", "1")
 }

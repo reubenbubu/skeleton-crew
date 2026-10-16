@@ -110,10 +110,14 @@ func (c *Client) AddLabels(number int, names ...string) ([]Label, error) {
 // RemoveLabel removes a label from an issue and returns the labels left.
 func (c *Client) RemoveLabel(number int, name string) ([]Label, error) {
 	var ls []Label
+	_, err := c.do(http.MethodDelete, c.labelPath(number, name), nil, &ls, http.StatusOK)
+	return ls, err
+}
+
+func (c *Client) labelPath(number int, name string) string {
 	// gh would expand a name such as x:branch as a placeholder.
 	escaped := strings.ReplaceAll(url.PathEscape(name), ":", "%3A")
-	_, err := c.do(http.MethodDelete, c.path("issues/%d/labels/%s", number, escaped), nil, &ls, http.StatusOK)
-	return ls, err
+	return c.path("issues/%d/labels/%s", number, escaped)
 }
 
 func (c *Client) Comments(number int) ([]Comment, error) {
@@ -168,4 +172,11 @@ type Event struct {
 // Events lists the events of issue number, oldest first.
 func (c *Client) Events(number int) ([]Event, error) {
 	return list[Event](c, c.path("issues/%d/events", number))
+}
+
+// TakeLabel removes a label from an issue and reports whether this call
+// removed it. Of several calls for the same label, only one gets true.
+func (c *Client) TakeLabel(number int, name string) (bool, error) {
+	status, err := c.do(http.MethodDelete, c.labelPath(number, name), nil, nil, http.StatusOK, http.StatusNotFound)
+	return status == http.StatusOK, err
 }

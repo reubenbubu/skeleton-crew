@@ -26,7 +26,7 @@ import (
 const CommitMessage = "Set up Skeleton Crew"
 
 // ignored are the lines crew adds to .gitignore.
-var ignored = []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock"}
+var ignored = []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock*"}
 
 type Options struct {
 	Dir     string
