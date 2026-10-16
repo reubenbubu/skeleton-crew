@@ -115,3 +115,16 @@ func RepoFromURL(url string) (string, bool) {
 	}
 	return m[1], true
 }
+
+// Release is a published release of a repository.
+type Release struct {
+	TagName string `json:"tag_name"`
+}
+
+// LatestRelease returns the repository's latest release, which GitHub takes
+// to be the newest one that is neither a draft nor a prerelease.
+func (c *Client) LatestRelease() (Release, error) {
+	var r Release
+	_, err := c.do(http.MethodGet, c.path("releases/latest"), nil, &r, http.StatusOK)
+	return r, err
+}

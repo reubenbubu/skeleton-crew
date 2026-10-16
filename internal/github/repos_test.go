@@ -127,3 +127,17 @@ func TestGitProtocol(t *testing.T) {
 		}
 	}
 }
+
+// #17-AC4
+func TestLatestRelease(t *testing.T) {
+	fake := fakegithub.New("user/project", clock.NewFake(clock.Epoch))
+	c := github.New("owner/tool", fake.Run)
+	if _, err := c.LatestRelease(); !github.NotFound(err) {
+		t.Fatalf("no release: got %v", err)
+	}
+	fake.SetLatestRelease("owner/tool", "v1.4.0")
+	r, err := github.New("owner/tool", fake.Run).LatestRelease()
+	if err != nil || r.TagName != "v1.4.0" {
+		t.Fatalf("got %+v %v", r, err)
+	}
+}

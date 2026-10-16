@@ -212,7 +212,7 @@ func TestInitNewProject(t *testing.T) {
 	if msg := gitIn(t, p.origin, "log", "-1", "--format=%s", "main"); msg != "Set up Skeleton Crew" {
 		t.Errorf("message %q", msg)
 	}
-	if got := p.read(".crew/crew.toml"); got != string(config.Template("python", "claude-code")) {
+	if got := p.read(".crew/crew.toml"); got != string(config.Template("python", "claude-code", "release")) {
 		t.Errorf("crew.toml:\n%s", got)
 	}
 	ignore := p.read(".gitignore")
@@ -408,7 +408,7 @@ func TestInitHarness(t *testing.T) {
 		p := newProject(t, "user/app")
 		p.env = tc.env
 		p.mustInit(append([]string{"--profile", "python"}, tc.args...)...)
-		if got := p.read(".crew/crew.toml"); got != string(config.Template("python", tc.harness)) {
+		if got := p.read(".crew/crew.toml"); got != string(config.Template("python", tc.harness, "release")) {
 			t.Errorf("%v %v: crew.toml:\n%s", tc.env, tc.args, got)
 		}
 	}

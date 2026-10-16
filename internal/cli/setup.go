@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/reubenbubu/skeleton-crew/internal/config"
 	"github.com/reubenbubu/skeleton-crew/internal/doctor"
@@ -14,18 +15,19 @@ import (
 )
 
 var commands = map[string]func([]string, Env) int{
-	"init":   runInit,
-	"doctor": runDoctor,
-	"ticket": runTicket,
-	"dm":     runDM,
-	"commit": runCommit,
-	"env":    runEnv,
-	"run":    runRun,
-	"review": runReview,
-	"brief":  runBrief,
-	"merge":  runMerge,
-	"status": runStatus,
-	"events": runEvents,
+	"init":    runInit,
+	"doctor":  runDoctor,
+	"ticket":  runTicket,
+	"dm":      runDM,
+	"commit":  runCommit,
+	"env":     runEnv,
+	"run":     runRun,
+	"review":  runReview,
+	"brief":   runBrief,
+	"merge":   runMerge,
+	"status":  runStatus,
+	"events":  runEvents,
+	"upgrade": runUpgrade,
 }
 
 // usageError is a problem with the command line: exit 2.
@@ -67,12 +69,16 @@ func runInit(args []string, env Env) int {
 	harness := fs.String("harness", "", "")
 	repo := fs.String("repo", "", "")
 	public := fs.Bool("public", false, "")
+	install := fs.String("install", "release", "")
 	asJSON := fs.Bool("json", false, "")
 	if err := flags(fs, args); err != nil {
 		return finish(env, err, false)
 	}
 	if *name == "" {
 		return finish(env, usageError{"missing flag: --profile"}, false)
+	}
+	if !slices.Contains(config.Installs, *install) {
+		return finish(env, usageError{"invalid --install: " + *install + "; want release, source or go"}, false)
 	}
 	p, err := profile.Load(env.Dir, *name)
 	if errors.Is(err, profile.ErrUnknown) {
@@ -87,7 +93,7 @@ func runInit(args []string, env Env) int {
 	if *harness == "" {
 		*harness = config.DetectHarness(env.Getenv)
 	}
-	res, err := setup.Init(setup.Options{Dir: env.Dir, Profile: p, Harness: *harness, Repo: *repo, Public: *public, GH: env.GH})
+	res, err := setup.Init(setup.Options{Dir: env.Dir, Profile: p, Harness: *harness, Repo: *repo, Public: *public, Install: *install, GH: env.GH})
 	if err != nil {
 		return finish(env, err, false)
 	}

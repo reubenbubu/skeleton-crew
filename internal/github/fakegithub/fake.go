@@ -56,6 +56,7 @@ type GitHub struct {
 	reviews     map[int][]*review
 	statuses    map[string][]*status
 	runs        []*run
+	releases    map[string]string // latest release tag, by owner/name
 }
 
 type issue struct {
@@ -123,6 +124,7 @@ func New(repo string, c clock.Clock) *GitHub {
 		branches:  map[string]string{},
 		reviews:   map[int][]*review{},
 		statuses:  map[string][]*status{},
+		releases:  map[string]string{},
 	}
 	p := "/repos/" + repo + "/"
 	routes := map[string]http.HandlerFunc{
@@ -153,6 +155,7 @@ func New(repo string, c clock.Clock) *GitHub {
 		"GET " + p + "commits/{sha}/status":                       g.combinedStatus,
 		"GET " + p + "actions/runs":                               g.listRuns,
 	}
+	routes["GET /repos/{owner}/{name}/releases/latest"] = g.latestRelease
 	routes["GET /user"] = g.getUser
 	routes["POST /user/repos"] = g.createRepo
 	routes["POST /orgs/{org}/repos"] = g.createRepo
@@ -329,6 +332,30 @@ func (g *GitHub) SetWorkflowRun(id int64, status, conclusion string) {
 			r.status, r.conclusion = status, conclusion
 		}
 	}
+}
+
+// SetLatestRelease makes tag the latest release of repo, given as
+// owner/name, which may be another repository than the fake's own.
+func (g *GitHub) SetLatestRelease(repo, tag string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.releases[repo] = tag
+}
+
+func (g *GitHub) latestRelease(w http.ResponseWriter, r *http.Request) {
+	full := r.PathValue("owner") + "/" + r.PathValue("name")
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	tag := g.releases[full]
+	if tag == "" {
+		fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{
+		"id": g.id(), "node_id": "RE_kwDOfake", "tag_name": tag, "target_commitish": "main", "name": tag,
+		"draft": false, "prerelease": false, "created_at": ts(g.clock.Now()), "published_at": ts(g.clock.Now()),
+		"html_url": "https://github.com/" + full + "/releases/tag/" + tag, "assets": []any{},
+	})
 }
 
 // knownCommit reports whether a branch points at sha.

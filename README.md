@@ -33,24 +33,36 @@ Copy one file, [`project/AGENTS.md`](project/AGENTS.md), into your project and o
 The file holds a short bootstrap block pinned to an exact `crew` release. On first use the agent:
 
 1. Checks whether the pinned `crew` version is installed.
-2. If not, asks you how to install it:
-   - **GitHub release (default):** downloads the pinned release binary and verifies its checksum and GitHub artifact attestation.
-   - **Build from source:** clones the pinned tag and builds it inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so a local build matches the release checksum byte for byte.
-   - If you already have Go: `go install` at the pinned tag.
-3. Asks you which profile the project uses, then runs `crew init` with your answers. For a stack that no built-in profile covers, the agent first writes a [custom profile](#custom-profiles). `crew init` takes flags only and never prompts; the agent has the conversation with you.
+2. If not, installs it with the method that `.crew/crew.toml` records, or asks you which method to use:
+   - **`release` (default):** downloads the pinned release binary with `gh release download`, checks it against the release's `SHA256SUMS`, verifies its GitHub artifact attestation with `gh attestation verify`, requiring the release workflow and the pinned tag, and installs it to `~/.local/bin/crew`.
+   - **`source`:** clones the pinned tag and builds it with `scripts/self-build.sh` inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so the bootstrap checks that the local build matches the release's `SHA256SUMS` byte for byte before it installs it to `~/.local/bin/crew`.
+   - **`go`:** if you already have Go, `go install` at the pinned tag, with the release's build flags. Go checks the module against its checksum database.
+3. Asks you which profile the project uses, then runs `crew init` with your answers and `--install <method>`. For a stack that no built-in profile covers, the agent first writes a [custom profile](#custom-profiles). `crew init` takes flags only and never prompts; the agent has the conversation with you.
 4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 
-The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs. `crew upgrade` moves the pin to a newer release.
+The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs before running them. Its commands need a POSIX shell, so on Windows they run in WSL.
+
+### Upgrading
+
+When you ask an agent to upgrade Skeleton Crew, it runs `crew upgrade`, then follows the bootstrap again. `crew upgrade` asks GitHub for the latest release of Skeleton Crew and, when it is newer than the pinned version, replaces every mention of the pinned version in the bootstrap section of `AGENTS.md` with it. It never moves the pin backwards. When `AGENTS.md` is committed, it commits the change straight to `main` with the message `Upgrade crew to <version>` and pushes it, as `crew dm wiring` does; otherwise it changes the file in place. It prints the new pin, the commit, and the install method `.crew/crew.toml` records:
+
+```
+pinned v0.2.0 was v0.1.0
+commit 4f2a9c1 pushed main
+install v0.2.0 with install=source as the bootstrap in AGENTS.md says
+```
+
+`crew --version` then no longer matches the pin, so the bootstrap installs the new version with the recorded method, showing you each command first. `crew upgrade` itself never downloads or replaces a binary: verification stays in commands you can see. It refuses when the checkout is not on `main`, when a committed `AGENTS.md` has uncommitted changes, or when `AGENTS.md` has no `## Bootstrap` section that pins a version, and a failure changes nothing. With the latest release already pinned, it prints `up to date <version>`.
 
 ### What `crew init` does
 
 ```
-crew init --profile <name> [--harness <name>] [--repo <owner>/<name>] [--public] [--json]
+crew init --profile <name> [--install release|source|go] [--harness <name>] [--repo <owner>/<name>] [--public] [--json]
 ```
 
 1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)), seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*` and `.crew/events.*` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)) and the install method as `install = "<method>"`, `release` unless `--install` names another, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*` and `.crew/events.*` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md`, `.crew/` and `.gitignore`.
 5. **Commit:** commits only the files it created, and a custom profile's directory when it has uncommitted changes, and pushes them to `main`, with the message `Set up Skeleton Crew`. The output names each file written as `wrote <path>` and the custom profile as `added .crew/profiles/<name>`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -700,6 +712,8 @@ A knowledge file that `main` does not hold shows as a line such as `=== .crew/do
 
 Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte.
 
+Pushing a tag `v<major>.<minor>.<patch>` runs the release workflow, `.github/workflows/release.yml`. It runs the tests, builds `crew` with `scripts/self-build.sh` for Linux and macOS on amd64 and arm64, as `crew-<os>-<arch>`, writes their `SHA256SUMS`, attests each binary's build provenance with GitHub artifact attestations, and publishes them as a GitHub release of the tag. The workflow's actions are pinned by commit. Attestations need a public repository.
+
 `crew` reaches GitHub only through `gh api`, with your own `gh` login. It never reads, prints or stores the token.
 
 An unknown command or flag exits non-zero with one line that names it, such as `unknown flag: --bogus`.
@@ -715,7 +729,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew --version` | Prints the version, such as `v0.1.0` |
 | `crew init` | Sets up the project; see [What `crew init` does](#what-crew-init-does) |
 | `crew doctor` | Checks tools, authentication, configuration, tier ranks, labels, knowledge size, rule conflicts and harness wiring; runs one gate. Prints one line per check, such as `ok git 2.47.1`, `warn harness: ...` or `fail gh-auth: run in your own terminal: gh auth login`, and exits non-zero if any check fails; see [What `crew doctor` checks](#what-crew-doctor-checks) |
-| `crew upgrade` | Moves the pinned version to a newer release, using the install method you chose |
+| `crew upgrade` | Moves the version pinned in `AGENTS.md` to the latest release, for the bootstrap to install with the method you chose; see [Upgrading](#upgrading) |
 | `crew brief <role> [<ticket>]` | Prints an agent's briefing, with the model and effort to use |
 
 ### Project Manager

@@ -15,7 +15,7 @@ import (
 func newBriefProject(t *testing.T) *devProject {
 	t.Helper()
 	p := newDevProject(t)
-	p.write(config.Path, strings.Replace(string(config.Template("python", "claude-code")), `level = "standard"`, `level = "thorough"`, 1))
+	p.write(config.Path, strings.Replace(string(config.Template("python", "claude-code", "release")), `level = "standard"`, `level = "thorough"`, 1))
 	p.pushMain(".crew/docs/product.md", "# Product\n\nA login service.\n")
 	p.pushMain(".crew/docs/architecture.md", "# Architecture\n\n  - `src/app/`: the package.\n\n")
 	p.pushMain(".crew/docs/conventions.md", "# Conventions\n\nTests name their criterion.\n")
@@ -113,7 +113,7 @@ func TestBriefNamesTheModel(t *testing.T) {
 		t.Fatalf("got\n%s", out)
 	}
 	// An empty model means the session's model, so the briefing names none.
-	p.write(config.Path, string(config.Template("python", "")))
+	p.write(config.Path, string(config.Template("python", "", "release")))
 	if out := p.ok("brief", "dev", "1"); !strings.HasPrefix(out, "brief dev #1\ntier=1 effort=medium testing=standard\n") {
 		t.Fatalf("got\n%s", out)
 	}

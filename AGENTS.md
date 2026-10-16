@@ -25,6 +25,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `cmd/crew/` | The CLI entry point |
 | `internal/` | CLI implementation packages |
 | `profiles/` | Built-in profiles, embedded into the binary |
+| `.github/workflows/release.yml` | The release workflow: builds, checksums, attests and publishes a tagged release |
 | `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `test-containers.sh` runs the tests that need a container engine; `self-build.sh` builds `crew` |
 | `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 

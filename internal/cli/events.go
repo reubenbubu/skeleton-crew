@@ -187,60 +187,74 @@ func recordWiring(env Env, name string, h config.Harness) error {
 			return errors.New("no such file: " + f)
 		}
 	}
+	_, err = commitMain(r, config.Path, h.Files, func(old []byte) ([]byte, string, error) {
+		b := config.Record(old, name, h)
+		_, err := config.Parse(config.Path, b)
+		return b, "Record the " + name + " wiring", err
+	})
+	return err
+}
+
+// commitMain rewrites the project file name with change, which gets the
+// file as main has it after a sync with origin, and commits the file, with
+// the project files extra, straight to main and pushes, like crew init. It
+// returns the new commit, or "" when nothing changed. A failure changes
+// nothing.
+func commitMain(r, name string, extra []string, change func(old []byte) (b []byte, message string, err error)) (string, error) {
 	repo := &git.Repo{Dir: r}
 	if branch, err := repo.CurrentBranch(); err != nil {
-		return err
+		return "", err
 	} else if branch != "main" {
-		return fmt.Errorf("checked out branch is %s, not main", branch)
+		return "", fmt.Errorf("checked out branch is %s, not main", branch)
 	}
-	if changed, err := repo.Changed(config.Path); err != nil {
-		return err
+	if changed, err := repo.Changed(name); err != nil {
+		return "", err
 	} else if changed {
-		return errors.New(config.Path + " has uncommitted changes")
+		return "", errors.New(name + " has uncommitted changes")
 	}
 	head, err := repo.SyncMain()
 	if err != nil {
-		return err
+		return "", err
 	}
-	path := filepath.Join(r, config.Path)
+	path := filepath.Join(r, name)
 	old, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return "", err
 	}
-	b := config.Record(old, name, h)
-	if _, err := config.Parse(config.Path, b); err != nil {
-		return err
+	b, message, err := change(old)
+	if err != nil {
+		return "", err
 	}
 	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return err
+		return "", err
 	}
-	paths := append([]string{config.Path}, h.Files...)
 	var changed []string
-	for _, p := range paths {
+	for _, p := range append([]string{name}, extra...) {
 		c, err := repo.Changed(p)
 		if err != nil {
-			return errors.Join(err, os.WriteFile(path, old, 0o644))
+			return "", errors.Join(err, os.WriteFile(path, old, 0o644))
 		}
 		if c && !slices.Contains(changed, p) {
 			changed = append(changed, p)
 		}
 	}
 	if len(changed) == 0 {
-		return nil
+		return "", nil
 	}
-	// Undo puts main, the index of the committed paths and the
-	// configuration back, and says so if it cannot.
-	undo := func(err error) error {
+	// Undo puts main, the index of the committed paths and the file back,
+	// and says so if it cannot.
+	undo := func(err error) (string, error) {
 		if rerr := errors.Join(repo.ResetTo(head, changed), os.WriteFile(path, old, 0o644)); rerr != nil {
-			return fmt.Errorf("%w; undoing it failed too: %v", err, rerr)
+			return "", fmt.Errorf("%w; undoing it failed too: %v", err, rerr)
 		}
-		return err
+		return "", err
 	}
-	if _, err := repo.CommitOnly("Record the "+name+" wiring", changed); err != nil {
+	commit, err := repo.CommitOnly(message, changed)
+	if err != nil {
 		return undo(err)
 	}
 	if err := repo.PushMain(); err != nil {
 		return undo(err)
 	}
-	return nil
+	return commit, nil
 }

@@ -49,7 +49,7 @@ func newDevProject(t *testing.T) *devProject {
 	p := &devProject{project: newTicketProject(t), box: &containers{}}
 	p.compose = p.box.run
 	p.main = p.dir
-	p.write(".crew/crew.toml", string(config.Template("python", "")))
+	p.write(".crew/crew.toml", string(config.Template("python", "", "release")))
 	p.token = p.claim()
 	p.ok("ticket", "new", "Login with email")
 	p.setBody(1, "## Goal\nLog in.\n## Acceptance criteria\n- [#1-AC1] A known email gets a link.\n")
@@ -484,7 +484,7 @@ func TestRun(t *testing.T) {
 // built-in profile's.
 func TestRunCustomProfile(t *testing.T) {
 	p := newDevProject(t)
-	p.write(".crew/crew.toml", strings.Replace(string(config.Template("python", "")), `profile = "python"`, `profile = "elixir"`, 1))
+	p.write(".crew/crew.toml", strings.Replace(string(config.Template("python", "", "release")), `profile = "python"`, `profile = "elixir"`, 1))
 	p.write(".crew/profiles/elixir/profile.toml", "[commands]\ntest = \"mix test\"\ntest-changed = \"mix test --stale\"\n[tests]\nglobs = [\"test/**/*_test.exs\"]\n")
 	p.inWorktree()
 	p.box.out, p.box.code = "ok\n", 0

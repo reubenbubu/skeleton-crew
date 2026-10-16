@@ -24,6 +24,7 @@ type Tier struct {
 
 type Config struct {
 	Profile     string
+	Install     string // how the user installs crew: release, source or go
 	Tiers       []Tier // by rank
 	Reviewer    int
 	MaxTier     int
@@ -43,6 +44,9 @@ type Harness struct {
 
 // Wirings are the kinds of harness wiring.
 var Wirings = []string{"wait", "own"}
+
+// Installs are the ways to install crew.
+var Installs = []string{"release", "source", "go"}
 
 // Record returns the configuration b with the table of harness name, if
 // any, replaced by one for h at the end.
@@ -133,7 +137,7 @@ func Parse(name string, b []byte) (Config, error) {
 	}
 	slices.SortFunc(items, func(a, b item) int { return cmp.Compare(a.line, b.line) })
 
-	c := Config{TopAttempts: 2, Testing: "standard", Devs: 3}
+	c := Config{Install: "release", TopAttempts: 2, Testing: "standard", Devs: 3}
 	harnessLines := map[string]int{}
 	harness := func(name string) Harness {
 		if c.Harnesses == nil {
@@ -199,6 +203,8 @@ func Parse(name string, b []byte) (Config, error) {
 		switch m := tierKey.FindStringSubmatch(it.key); {
 		case it.key == "profile":
 			c.Profile, err = str()
+		case it.key == "install":
+			c.Install, err = oneOf(Installs)
 		case it.key == "testing.level":
 			c.Testing, err = oneOf(Levels)
 		case m != nil && m[2] == "effort":
@@ -289,11 +295,12 @@ var defaultModels = map[string][3]string{
 }
 
 // Template returns the configuration crew init writes for profile, with the
-// default models for harness.
-func Template(profile, harness string) []byte {
+// default models for harness and the install method install.
+func Template(profile, harness, install string) []byte {
 	m := defaultModels[harness]
 	return fmt.Appendf(nil, `# Skeleton Crew configuration.
 profile = %q
+install = %q   # how crew is installed: release | source | go
 
 # Ranks run from 1 upwards with no gaps. An empty model means the session's model.
 [tiers.1]
@@ -323,7 +330,7 @@ level = "standard"   # minimal | standard | thorough
 
 [parallel]
 devs = 3   # Devs that work at once
-`, profile, m[0], m[1], m[2])
+`, profile, install, m[0], m[1], m[2])
 }
 
 // DetectHarness names the agent harness crew runs in, from its environment,

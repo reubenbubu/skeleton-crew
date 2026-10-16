@@ -5,6 +5,7 @@ package setup
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -32,6 +33,7 @@ type Options struct {
 	Dir     string
 	Profile profile.Profile
 	Harness string // for the default models; "" when unknown
+	Install string // how the user installs crew; "" for release
 	Repo    string // owner/name of the repository to create; "" for the default
 	Public  bool
 	GH      github.Runner
@@ -95,7 +97,8 @@ func Init(o Options) (Result, error) {
 	cfgData, err := os.ReadFile(filepath.Join(dir, config.Path))
 	haveCfg := err == nil
 	if errors.Is(err, fs.ErrNotExist) {
-		cfgData = config.Template(o.Profile.Name, o.Harness)
+		install := cmp.Or(o.Install, "release")
+		cfgData = config.Template(o.Profile.Name, o.Harness, install)
 	} else if err != nil {
 		return res, err
 	}

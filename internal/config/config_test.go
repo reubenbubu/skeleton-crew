@@ -9,6 +9,7 @@ import (
 func defaults(models ...string) Config {
 	return Config{
 		Profile: "python",
+		Install: "release",
 		Tiers: []Tier{
 			{Rank: 1, Name: "light", Model: models[0], Effort: "medium"},
 			{Rank: 2, Name: "standard", Model: models[1], Effort: "medium"},
@@ -32,7 +33,7 @@ func TestTemplateHasTheReadmeDefaults(t *testing.T) {
 		{"opencode", defaults("", "", "")},
 		{"", defaults("", "", "")},
 	} {
-		got, err := Parse(Path, Template("python", c.harness))
+		got, err := Parse(Path, Template("python", c.harness, "release"))
 		if err != nil {
 			t.Fatalf("%q: %v", c.harness, err)
 		}
@@ -44,7 +45,7 @@ func TestTemplateHasTheReadmeDefaults(t *testing.T) {
 
 // #4-AC4
 func TestTemplateIsCommented(t *testing.T) {
-	s := string(Template("python", "claude-code"))
+	s := string(Template("python", "claude-code", "release"))
 	for _, want := range []string{"reviewer = 2", "max_tier = 3", "top_attempts = 2", `level = "standard"`, "devs = 3", "#"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("template lacks %q:\n%s", want, s)
@@ -60,6 +61,7 @@ func TestOptionalKeysDefault(t *testing.T) {
 	}
 	want := Config{
 		Profile:     "python",
+		Install:     "release",
 		Tiers:       []Tier{{Rank: 1, Effort: "low"}, {Rank: 2, Effort: "max"}},
 		Reviewer:    2,
 		MaxTier:     2,
@@ -99,11 +101,20 @@ func TestRejectsInvalidConfig(t *testing.T) {
 		{"profile = \"python\"\n", "f: no tiers"},
 		{"profile = \"python\"\n[tiers]\n", "f: no tiers"},
 		{"profile = 1.5\n", "f:1: unsupported value"},
+		{"install = \"curl\"\n" + base, "f:1: install must be release, source or go"},
 	} {
 		_, err := Parse("f", []byte(c.src))
 		if err == nil || err.Error() != c.want {
 			t.Errorf("%q:\ngot  %v\nwant %s", c.src, err, c.want)
 		}
+	}
+}
+
+// #17-AC4
+func TestTemplateRecordsInstall(t *testing.T) {
+	got, err := Parse(Path, Template("python", "", "source"))
+	if err != nil || got.Install != "source" {
+		t.Fatalf("install=%q err=%v", got.Install, err)
 	}
 }
 
@@ -131,7 +142,7 @@ func TestDetectHarness(t *testing.T) {
 
 // #13-AC5
 func TestHarnessRecords(t *testing.T) {
-	src := string(Template("python", "claude-code")) +
+	src := string(Template("python", "claude-code", "release")) +
 		"\n[harness.claude-code]\nwiring = \"wait\"\n" +
 		"\n[harness.opencode]\nwiring = \"own\"\nstart = \"Load the \\\"crew-wake\\\" plugin.\"\nfiles = [\".opencode/plugins/crew-wake.ts\"]\n"
 	got, err := Parse(Path, []byte(src))
