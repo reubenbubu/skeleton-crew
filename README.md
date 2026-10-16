@@ -46,7 +46,7 @@ The bootstrap block never fetches anything from a moving branch, and it shows th
 
 1. **Repository:** uses the existing git repository and its `origin`. If there is none, it runs `git init` and creates the GitHub repository, private by default.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/` and `.crew/logs/` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/` and `.crew/lead.lock` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold.
 5. **Commit:** commits only the files it created and pushes them to `main`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -325,6 +325,7 @@ The local repository always matches GitHub.
 You can have several DM sessions open at once, but only one of them, the **lead**, acts on work.
 
 - A DM session starts with `crew dm claim`. If no one holds the lead, it gets it, along with a token that its lead-only commands carry.
+- The lead is recorded in `.crew/lead.lock`, a local file that is not committed. All DM sessions of a project run in the same checkout, because worktrees, compose projects and gate runs are local too.
 - Only the lead starts Devs and Reviewers, merges, cancels and runs recovery. `crew` refuses these from any other session with `not-lead`.
 - Every other DM is **conversational**. It discusses implementation with you, records decisions, creates tickets from your requests and opens knowledge-only PRs. It never starts or merges work.
 - `crew dm release` gives up the lead when the lead session ends normally.
@@ -444,6 +445,7 @@ Skeleton Crew adds only `AGENTS.md` and `.crew/` to the root of your project. Th
 AGENTS.md                 the seed file
 .crew/
   crew.toml               configuration
+  lead.lock               which DM session holds the lead; not committed
   logs/                   full gate and test output; not committed, pruned automatically
   worktrees/              one worktree per ticket in flight; not committed
   docs/
