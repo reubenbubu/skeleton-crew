@@ -98,6 +98,7 @@ The DM then opens an **onboarding ticket**, which goes through the normal flow. 
 
 - Git, a container engine (Docker or Podman, with compose) and a GitHub account.
 - An agent harness that reads `AGENTS.md`, runs shell commands, and lets an agent start subagents without your intervention.
+- A machine that stays on, with the lead DM's session open, while the crew works; see [Keeping the lead DM running](#keeping-the-lead-dm-running).
 - Linux, macOS or Windows, on amd64 or arm64. Under WSL, `crew` runs as on Linux.
 
 No harness plugins, hooks or MCP servers are required. [Harness wiring](#keeping-the-lead-dm-running) lets the lead DM work without prompting. The lead DM checks for it itself; it needs nothing installed when the harness can wake an agent on a background command's exit.
@@ -496,6 +497,18 @@ No internal mechanism may stop the crew from making progress. For the lead this 
 An agent session only acts when it has a turn. Without help, the lead DM stops when it runs out of work and waits for a prompt, even after new work becomes eligible. Keeping it in a long polling loop is not acceptable either, because every idle check would grow its context.
 
 `crew` ships no harness adapters. It provides one command to wait on, and it defines what any wiring must achieve. The lead DM checks its harness every time it starts and uses the lightest wiring that works.
+
+The crew works on its own only while a lead DM session is open on your machine and its wiring wakes it. When the session closes, or the wiring stops working, work stops where it is: Devs and Reviewers stop, and nothing new starts. Nothing is lost, because all state is on GitHub, and the next lead DM picks up as [Session recovery](#session-recovery) describes. The lead DM says this to you when it takes the lead.
+
+### Validated harnesses
+
+These harnesses have been checked by a field test, as the table says. Others rely on the lead DM's [self-test](#checking-the-harness) alone, which tells it at every start whether the harness wakes it.
+
+| Harness | Checked |
+| --- | --- |
+| Claude Code 2.1.296, VS Code extension, Linux | Wiring with `crew events --wait`: a real event woke the lead |
+| Claude Code, headless `claude -p`, Linux | A full run from requests to merged and deployed tickets, with foreground Devs and Reviewers and no wiring |
+| OpenCode 2.0.28, Linux | Wiring with `crew events --wait` |
 
 ### Waiting for events
 
