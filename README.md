@@ -654,7 +654,7 @@ Skeleton Crew never deploys anything itself. A profile may include a GitHub Acti
 
 - It runs from a detached worktree at `.crew/worktrees/main`, in the compose project `crew-<id>-main`, which the leftover removal in [Session recovery](#session-recovery) never touches.
 - `crew merge` refreshes it after every merge: it checks the new `main` out in the same worktree, then runs `up -d --build --force-recreate --renew-anon-volumes`, so the app restarts on the new code and takes its dependencies from the new image. A refresh that fails prints a warning such as `warning: main instance not refreshed: up: exit 1; run crew main up` on stderr. The merge still stands.
-- Its volumes are kept across refreshes, so its data, such as a database, survives. Migrations apply forward. `crew main down --volumes` discards the data.
+- Its named volumes are kept across refreshes, so data that `compose.yaml` keeps in one, such as the `java-spring` database, survives. Anonymous volumes, such as `node_modules`, are renewed from the new image. Migrations apply forward. `crew main down --volumes` discards the data.
 - `crew main down` stops it and writes `.crew/main.off`, so later merges leave it stopped. `crew main up` removes `.crew/main.off` and starts it again.
 
 ### Ports
