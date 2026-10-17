@@ -49,6 +49,24 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 - Field tests run the whole pipeline against a real repository: the agent plays the user, sends requests to a PM or DM session, and checks the tickets, PRs, gates, reviews and merges that result. Each field test creates its own private repository with a randomized name and deletes it when the test is done. Never use one of the user's existing repositories.
 - A field test runs a binary from `scripts/self-build.sh <version>`, placed first on `PATH` from a scratch directory, never in `~/.local/bin`, where the bootstrap would take it for a verified install. The PM and DM sessions run headless in the project's directory, for example `claude -p "<request>" --session-id <id>` and then `--resume <id>` for each later message. A headless session cannot be woken during its turn, so its DM skips the wiring self-test and starts Devs and Reviewers as foreground subagents; the agent running the test does the self-test itself as lead.
 
+## Releasing
+
+Release only when the user asks. Versions are `v<major>.<minor>.<patch>`: a new minor version for new behaviour, a new patch version for fixes only.
+
+1. Start on `main`, clean and level with `origin/main`. `scripts/test.sh` passes; run `scripts/test-containers.sh` too when the gate, compose or profiles changed.
+2. Replace every mention of the previous version in `project/AGENTS.md` with the new one, and commit it as `Pin crew <version> in the seed AGENTS.md.` The tagged commit must pin its own version, so the seed file at a tag installs that tag.
+3. Tag a commit that holds the pin with an annotated tag, and push `main` and the tag together:
+
+   ```sh
+   git tag -a <version> -m <version>
+   git push origin main <version>
+   ```
+
+4. The tag starts `.github/workflows/release.yml`. Follow it with `gh run watch` until it ends. The `windows` job must pass before the `release` job builds, attests and publishes.
+5. If the workflow fails before it publishes, no release exists: fix the cause on `main`, delete the tag locally and on `origin` (`git push origin :refs/tags/<version>`), and tag again. Never move or delete the tag of a published release; publish a new patch version instead.
+6. Verify the release as the bootstrap does, from a scratch directory: download `crew-linux-amd64` and `SHA256SUMS`, check the checksum, run `gh attestation verify` with `--signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml` and `--source-ref refs/tags/<version>`, and check that `scripts/self-build.sh <version>` from a fresh clone of the tag matches `SHA256SUMS` byte for byte.
+7. Record the release in the session recap: the version, its UTC publish time, the tagged commit and what was verified.
+
 ## Output contract
 
 `crew` output is for agents. Keep it terse and stable: no API structure, IDs, colours or decoration. Times are absolute UTC timestamps, never relative. Provide `--json` for structured output. Never alter ticket bodies or comments.
