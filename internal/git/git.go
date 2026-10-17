@@ -377,6 +377,21 @@ func (r *Repo) MergeBase(branch string) (string, error) {
 	return git(r.Dir, "merge-base", "HEAD", "refs/remotes/origin/"+branch)
 }
 
+// MergeBaseOf returns the best common ancestor of commits a and b.
+func (r *Repo) MergeBaseOf(a, b string) (string, error) {
+	return git(r.Dir, "merge-base", a, b)
+}
+
+// Trees lists the trees of the commits that sha has and base does not,
+// oldest first.
+func (r *Repo) Trees(base, sha string) ([]string, error) {
+	out, err := git(r.Dir, "log", "--reverse", "--format=%T", base+".."+sha)
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
+
 // Commit commits the index to the current branch and returns the new
 // commit.
 func (r *Repo) Commit(msg string) (string, error) {

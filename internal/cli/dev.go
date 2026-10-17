@@ -223,6 +223,9 @@ func runCommit(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
+	if err := ticket.Committable(c, h.number); err != nil {
+		return finish(env, err, false)
+	}
 	repo := &git.Repo{Dir: h.dir}
 	rec, err := check(env, repo, h, prof, phase)
 	if err != nil {

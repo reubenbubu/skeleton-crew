@@ -426,6 +426,31 @@ func TestCommitRefusals(t *testing.T) {
 	p.refused(2, "unknown flag: --blue", "commit", "--blue", "x")
 }
 
+// #22-AC1
+func TestCommitOnlyWhileTheDevWorks(t *testing.T) {
+	p := newDevProject(t)
+	p.waiting()
+	head := p.git("rev-parse", "HEAD")
+	p.write("src/app/extra.py", "x = 1\n")
+	before := len(p.writes())
+	p.refused(1, "stage-changed: #1 is at 4:waiting-review, not 4:in-progress or 4:review-rejected", "commit", "x")
+	if w := p.writes()[before:]; len(w) != 0 {
+		t.Fatalf("a refused commit wrote: %q", w)
+	}
+	if got := p.git("rev-parse", "HEAD"); got != head {
+		t.Fatalf("committed %s", got)
+	}
+	if got := p.git("diff", "--cached", "--name-only"); got != "" {
+		t.Fatalf("left staged: %s", got)
+	}
+	// After a rejection, the Dev may commit again.
+	wt := p.dir
+	p.dir = p.main
+	p.ok("review", "1", "--reject", "no")
+	p.dir = wt
+	p.ok("commit", "x")
+}
+
 // #7-AC7
 func TestEnv(t *testing.T) {
 	p := newDevProject(t)

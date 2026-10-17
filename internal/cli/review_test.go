@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
 )
@@ -91,6 +92,45 @@ func TestReviewRefusals(t *testing.T) {
 	if w := p.writes()[before:]; len(w) != 0 {
 		t.Fatalf("a refused review wrote: %q", w)
 	}
+}
+
+// #22-AC2: a head pushed after crew ticket submit is not reviewed.
+func TestReviewRefusesAHeadNotSubmitted(t *testing.T) {
+	p := newDevProject(t)
+	p.waiting()
+	p.write("src/app/extra.py", "x = 1\n")
+	p.git("add", "-A")
+	p.git("commit", "-q", "-m", "late")
+	p.git("push", "-q", "origin", branch)
+	late := p.git("rev-parse", "HEAD")
+	p.fake.SetBranch(branch, late)
+	p.dir = p.main
+	before := len(p.writes())
+	p.refused(1, "not-submitted: PR #2 is at "+late[:7]+", not the commit crew ticket submit gated", "review", "1", "--approve")
+	if w := p.writes()[before:]; len(w) != 0 {
+		t.Fatalf("a refused review wrote: %q", w)
+	}
+	p.stage("4:waiting-review")
+}
+
+// #22-AC2: a commit gated in an earlier attempt is not the one submitted.
+func TestReviewRefusesACommitOfAnEarlierAttempt(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.waiting()
+	p.dir = p.main
+	p.ok("review", "1", "--reject", "no")
+	p.clock.Advance(time.Hour)
+	p.ok("ticket", "retry", "1", "--lead", p.token)
+	// The ticket goes back to review without a new submit.
+	labels := p.fake.IssueLabels(1)
+	for i, l := range labels {
+		if l == "stage:4:in-progress" {
+			labels[i] = "stage:4:waiting-review"
+		}
+	}
+	p.fake.SetIssueLabels(1, labels...)
+	p.refused(1, "not-submitted: PR #2 is at "+sha[:7]+", not the commit crew ticket submit gated", "review", "1", "--approve")
+	p.stage("4:waiting-review")
 }
 
 // mirror makes the fake GitHub follow every push to origin, as GitHub does.
@@ -303,6 +343,87 @@ func TestMergeConflict(t *testing.T) {
 	}
 	p.merged(sha)
 	p.stage("9:done")
+}
+
+// #22-AC3 #22-AC5: a commit pushed after the approval does not merge
+// under it, nor does a rebase that changes the approved content.
+func TestMergeRefusesWhatWasNotApproved(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.approved()
+	wt := filepath.Join(p.main, worktree)
+	// crew commit refuses once the ticket is approved.
+	p.dir = wt
+	p.write("src/app/extra.py", "x = 1\n")
+	p.refused(1, "stage-changed: #1 is at 5:review-approved, not 4:in-progress or 4:review-rejected", "commit", "late")
+	p.git("add", "-A")
+	p.git("commit", "-q", "-m", "late")
+	p.git("push", "-q", "origin", branch)
+	late := p.git("rev-parse", "HEAD")
+	p.dir = p.main
+	before := len(p.writes())
+	refusal := func(head string) string {
+		return "not-approved: " + branch + " is at " + head[:7] + ", not the approved " + sha[:7] + " or a rebase of it"
+	}
+	p.refused(1, refusal(late), "merge", "1", "--lead", p.token)
+	// Once main has moved, crew merge would rebase the late commit.
+	other := p.pushMain("docs/notes.md", "notes\n")
+	p.refused(1, refusal(late), "merge", "1", "--lead", p.token)
+	// A rebase of the approved commit with a change in it is no rebase of it.
+	gitIn(t, wt, "reset", "-q", "--hard", sha)
+	gitIn(t, wt, "fetch", "-q", "origin")
+	gitIn(t, wt, "rebase", "-q", "origin/main")
+	os.WriteFile(filepath.Join(wt, "src/app/extra.py"), []byte("x = 2\n"), 0o644)
+	gitIn(t, wt, "add", "-A")
+	gitIn(t, wt, "commit", "-q", "--amend", "--no-edit")
+	gitIn(t, wt, "push", "-q", "-f", "origin", branch)
+	changed := gitIn(t, wt, "rev-parse", "HEAD")
+	p.refused(1, refusal(changed), "merge", "1", "--lead", p.token)
+	// Nor is one whose extra commits cancel out.
+	gitIn(t, wt, "reset", "-q", "--hard", sha)
+	gitIn(t, wt, "rebase", "-q", "origin/main")
+	for _, body := range []string{"x = 3\n", ""} {
+		if body == "" {
+			gitIn(t, wt, "rm", "-q", "src/app/extra.py")
+		} else {
+			os.WriteFile(filepath.Join(wt, "src/app/extra.py"), []byte(body), 0o644)
+			gitIn(t, wt, "add", "-A")
+		}
+		gitIn(t, wt, "commit", "-q", "-m", "detour")
+	}
+	gitIn(t, wt, "push", "-q", "-f", "origin", branch)
+	detour := gitIn(t, wt, "rev-parse", "HEAD")
+	p.refused(1, refusal(detour), "merge", "1", "--lead", p.token)
+	if w := p.writes()[before:]; len(w) != 0 {
+		t.Fatalf("a refused merge wrote: %q", w)
+	}
+	p.stage("5:review-approved")
+	if got := gitIn(t, p.origin, "rev-parse", "main"); got != other {
+		t.Fatalf("origin main at %s; want %s", got, other)
+	}
+	if len(p.box.calls) != 0 {
+		t.Fatalf("compose calls %q", p.box.calls)
+	}
+}
+
+// #22-AC4: a merge that stopped after pushing its rebase runs again.
+func TestMergeRunsAgainAfterItsRebase(t *testing.T) {
+	p := newDevProject(t)
+	p.approved()
+	p.pushMain("docs/notes.md", "notes\n")
+	p.box.answer = func(_ string, args []string) (string, int) {
+		if slices.Contains(args, `pytest -q "$@"`) {
+			return "1 failed\n", 1
+		}
+		return "", 0
+	}
+	p.run("merge", "1", "--lead", p.token)
+	p.stage("6:pending-merge")
+	rebased := gitIn(t, p.origin, "rev-parse", branch)
+	p.box.answer = nil
+	if want := "gate passed " + rebased[:7] + "\nmerged " + rebased[:7] + " into main\n#1 stage=9:done\n" + p.removed(); p.merge() != want {
+		t.Fatalf("want %q", want)
+	}
+	p.merged(rebased)
 }
 
 // #9-AC6: with a deployment workflow, the ticket waits at 7:merged.

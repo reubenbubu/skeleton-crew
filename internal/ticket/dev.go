@@ -13,6 +13,12 @@ import (
 
 var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 
+// GateContext is the context of the commit status the gate sets.
+const GateContext = "crew/gate"
+
+// short is the abbreviated form of commit sha.
+func short(sha string) string { return sha[:min(7, len(sha))] }
+
 // Slug turns a ticket's title into the last part of its branch name: lower
 // case, every run of other characters than letters and digits turned into
 // -, and cut to at most 40 characters at a -. A title with nothing left
@@ -236,6 +242,16 @@ func InProgress(c *github.Client, number int) (github.Issue, error) {
 	return i, err
 }
 
+// Committable refuses unless ticket number is at 4:in-progress or
+// 4:review-rejected, the stages at which its Dev commits.
+func Committable(c *github.Client, number int) error {
+	_, f, err := get(c, number)
+	if err == nil && f.Stage != "4:in-progress" && f.Stage != "4:review-rejected" {
+		err = stageChanged(number, f.Stage, "4:in-progress or 4:review-rejected")
+	}
+	return err
+}
+
 // Submit moves ticket number from 4:in-progress to 4:waiting-review, once
 // the gate has passed.
 func Submit(c *github.Client, number int) error {
@@ -267,6 +283,9 @@ func Review(c *github.Client, number int, reason string) (int, error) {
 		return 0, fmt.Errorf("#%d has no open PR from %s", number, branch)
 	}
 	pr := prs[0]
+	if err := submitted(c, i, pr); err != nil {
+		return pr.Number, err
+	}
 	body, to := Marker("review", "reviewer")+"approved", "5:review-approved"
 	if reason != "" {
 		body, to = Marker("review", "reviewer")+"rejected: "+reason, "4:review-rejected"
@@ -281,21 +300,74 @@ func Review(c *github.Client, number int, reason string) (int, error) {
 	return pr.Number, err
 }
 
-// PendingMerge moves ticket number from 5:review-approved to
-// 6:pending-merge and returns it. A ticket already at 6:pending-merge, whose
-// merge stopped before, stays there.
-func PendingMerge(c *github.Client, number int) (github.Issue, Fields, error) {
+// submitted refuses unless the head of pr, ticket i's PR, is the commit
+// crew ticket submit gated in the current attempt: it has a successful
+// crew/gate status set since the ticket last entered 4:in-progress. Until
+// crew merge, only crew ticket submit sets that status.
+func submitted(c *github.Client, i github.Issue, pr github.PullRequest) error {
+	since, err := entered(c, i, "stage:4:in-progress")
+	if err != nil {
+		return err
+	}
+	s, err := c.CombinedStatus(pr.Head.SHA)
+	if err != nil {
+		return err
+	}
+	for _, st := range s.Statuses {
+		if st.Context == GateContext && st.State == "success" && !st.CreatedAt.Before(since) {
+			return nil
+		}
+	}
+	return fmt.Errorf("not-submitted: PR #%d is at %s, not the commit crew ticket submit gated", pr.Number, short(pr.Head.SHA))
+}
+
+// Approved reads ticket number, which must be at 5:review-approved or, when
+// its merge stopped before, at 6:pending-merge. It returns the commit the
+// newest approving review on its PR names.
+func Approved(c *github.Client, number int) (github.Issue, Fields, string, error) {
 	i, f, err := get(c, number)
 	if err != nil {
-		return i, f, err
+		return i, f, "", err
 	}
 	if !slices.Contains(Kinds, f.Kind) {
-		return i, f, fmt.Errorf("#%d has no single kind: kind=%s", number, f.Kind)
+		return i, f, "", fmt.Errorf("#%d has no single kind: kind=%s", number, f.Kind)
 	}
-	if f.Stage != "6:pending-merge" {
-		_, err = move(c, number, "5:review-approved", "6:pending-merge", nil)
+	if f.Stage != "5:review-approved" && f.Stage != "6:pending-merge" {
+		return i, f, "", stageChanged(number, f.Stage, "5:review-approved")
 	}
-	return i, f, err
+	branch := Branch(f.Kind, number, i.Title)
+	prs, err := c.PullRequests(branch, "open")
+	if err != nil {
+		return i, f, "", err
+	}
+	if len(prs) == 0 {
+		return i, f, "", fmt.Errorf("#%d has no open PR from %s", number, branch)
+	}
+	reviews, err := c.Reviews(prs[0].Number)
+	if err != nil {
+		return i, f, "", err
+	}
+	approved := ""
+	for _, r := range reviews {
+		if r.Body == Marker("review", "reviewer")+"approved" {
+			approved = r.CommitID
+		}
+	}
+	if approved == "" {
+		return i, f, "", fmt.Errorf("not-approved: PR #%d has no approving review", prs[0].Number)
+	}
+	return i, f, approved, nil
+}
+
+// PendingMerge moves ticket number, at stage, from 5:review-approved to
+// 6:pending-merge. A ticket already at 6:pending-merge, whose merge stopped
+// before, stays there.
+func PendingMerge(c *github.Client, number int, stage string) error {
+	if stage == "6:pending-merge" {
+		return nil
+	}
+	_, err := move(c, number, "5:review-approved", "6:pending-merge", nil)
+	return err
 }
 
 // Merged moves ticket number from 6:pending-merge to 7:merged. Without a

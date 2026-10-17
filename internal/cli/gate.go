@@ -139,12 +139,12 @@ func gateCommit(env Env, root string, repo *git.Repo, c *github.Client, number i
 func gated(c *github.Client, sha string) (bool, error) {
 	s, err := c.CombinedStatus(sha)
 	return slices.ContainsFunc(s.Statuses, func(st github.Status) bool {
-		return st.Context == "crew/gate" && st.State == "success"
+		return st.Context == ticket.GateContext && st.State == "success"
 	}), err
 }
 
 func setGate(c *github.Client, sha, state, description string) error {
-	return c.CreateStatus(sha, github.Status{State: state, Context: "crew/gate", Description: description})
+	return c.CreateStatus(sha, github.Status{State: state, Context: ticket.GateContext, Description: description})
 }
 
 // gateResult is the outcome of a gate run. failed is "" when it passed,

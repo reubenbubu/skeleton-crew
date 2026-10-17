@@ -43,7 +43,7 @@ func runMerge(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
-	issue, f, err := ticket.PendingMerge(c, n)
+	issue, f, approved, err := ticket.Approved(c, n)
 	if err != nil {
 		return finish(env, err, false)
 	}
@@ -55,6 +55,20 @@ func runMerge(args []string, env Env) int {
 	branch := ticket.Branch(f.Kind, n, issue.Title)
 	sha, err := repo.Branch(branch)
 	if err != nil {
+		return finish(env, err, false)
+	}
+	// A merge that stopped after its rebase was pushed left the branch at
+	// a rebase of the approved commit; anything else was never approved.
+	if sha != approved {
+		same, err := rebaseOf(r, repo, n, approved, sha)
+		if err != nil {
+			return finish(env, err, false)
+		}
+		if !same {
+			return finish(env, fmt.Errorf("not-approved: %s is at %s, not the approved %s or a rebase of it", branch, sha[:7], approved[:7]), false)
+		}
+	}
+	if err := ticket.PendingMerge(c, n, f.Stage); err != nil {
 		return finish(env, err, false)
 	}
 	var out []string
@@ -150,6 +164,33 @@ func rebase(root string, repo *git.Repo, number int, branch, base, sha string) (
 		return "", err
 	}
 	return head, wt.Push(head, branch, sha)
+}
+
+// rebaseOf reports whether commit head is commit approved rebased with its
+// content unchanged: rebasing approved onto where head left main gives
+// commits with the same trees as head's, one for one. It rebases in a
+// detached worktree of the main checkout at root, and a conflict counts as
+// a change.
+func rebaseOf(root string, repo *git.Repo, number int, approved, head string) (bool, error) {
+	onto, err := repo.MergeBaseOf(head, "refs/remotes/origin/main")
+	if err != nil {
+		return false, err
+	}
+	want, err := repo.Trees(onto, head)
+	if err != nil {
+		return false, err
+	}
+	dir := filepath.Join(root, ".crew", "worktrees", "merge", strconv.Itoa(number))
+	if err := repo.AddDetached(dir, approved); err != nil {
+		return false, err
+	}
+	defer repo.RemoveWorktree(dir)
+	wt := &git.Repo{Dir: dir}
+	if conflicts, err := wt.Rebase(onto); err != nil || len(conflicts) > 0 {
+		return false, err
+	}
+	got, err := wt.Trees(onto, "HEAD")
+	return slices.Equal(got, want), err
 }
 
 // cleanUp takes down the compose project called project, with its volumes,

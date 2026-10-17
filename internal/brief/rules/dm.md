@@ -78,7 +78,7 @@ A review rejection, or a Dev that runs `crew ticket stuck`, is a failed attempt.
 
 ## Merging
 
-- Merge approved tickets one at a time with `crew merge <n> --lead <token>`. It moves the ticket from `5:review-approved` to `6:pending-merge`. If `main` has moved, it rebases the branch and runs the gate again. Then it fast-forwards `main` to the gated commit, moves the ticket to `7:merged`, and on to `9:done` when there is no deployment workflow. It removes the ticket's worktree and compose project.
+- Merge approved tickets one at a time with `crew merge <n> --lead <token>`. It moves the ticket from `5:review-approved` to `6:pending-merge`. If `main` has moved, it rebases the branch and runs the gate again. Then it fast-forwards `main` to the gated commit, moves the ticket to `7:merged`, and on to `9:done` when there is no deployment workflow. It removes the ticket's worktree and compose project. A refusal `not-approved` means the branch holds a commit no Reviewer approved: never merge it by hand. Put the branch back at the approved commit with `git push --force-with-lease`, run `crew merge` again, and put the later work in a new ticket.
 - `crew merge` also accepts a ticket at `6:pending-merge`, so run it again once you have handled a problem.
 - A conflict leaves the ticket at `6:pending-merge` and lists the files, such as `merge-conflict: #12 stays at 6:pending-merge: src/app/login.py`. Resolve trivial conflicts, such as lockfiles and version lines, yourself. Then run `crew merge` again.
 - A failed gate also leaves the ticket at `6:pending-merge`.
