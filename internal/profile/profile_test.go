@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -108,6 +109,29 @@ func TestParseManifest(t *testing.T) {
 func TestBuiltins(t *testing.T) {
 	if got := Builtins(); !slices.Equal(got, []string{"java-spring", "node-ts", "python"}) {
 		t.Fatalf("got %v", got)
+	}
+}
+
+// Every image a built-in profile uses is named with its registry, because
+// Podman resolves no short name without registries configured.
+func TestBuiltinImagesAreFullyNamed(t *testing.T) {
+	ref := regexp.MustCompile(`(?m)^(?:FROM|\s*image:)\s+(\S+)`)
+	for _, name := range Builtins() {
+		p, err := Builtin(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range []string{"Containerfile", "compose.yaml"} {
+			b, err := fs.ReadFile(p.Scaffold, file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range ref.FindAllStringSubmatch(string(b), -1) {
+				if host, _, ok := strings.Cut(m[1], "/"); !ok || !strings.Contains(host, ".") {
+					t.Errorf("%s %s: %s has no registry", name, file, m[1])
+				}
+			}
+		}
 	}
 }
 

@@ -650,6 +650,8 @@ skip  = ["@pytest.mark.skip", "pytest.skip(", "@unittest.skip"]
 
 A command that is left out is a step that does not apply. `crew` runs `test-changed` with the changed test files appended as arguments. `skip` lists the text that marks a skipped or disabled test, which the gate refuses in added test lines; it is optional.
 
+A profile's `Containerfile` and `compose.yaml` name every image with its registry, such as `docker.io/library/python:3.13-slim`, because Podman does not resolve a short name such as `python:3.13-slim` unless registries are configured.
+
 Every profile's `compose.yaml` has a service called `app`, which runs the profile's commands: `crew` runs `<engine> compose -p crew-<id>-<ticket> run --rm -T app sh -c '<command>'` in the ticket's worktree. The engine is the first of Podman and Docker that has compose, as `crew doctor` reports.
 
 Built-in profiles:

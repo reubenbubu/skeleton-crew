@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-25
+FROM docker.io/library/maven:3.9-eclipse-temurin-25
 WORKDIR /app
 COPY pom.xml ./
 RUN mvn -B -q dependency:go-offline
