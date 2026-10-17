@@ -34,14 +34,14 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
 
 1. Checks whether the pinned `crew` version is installed.
 2. If not, installs it with the method that `.crew/crew.toml` records, or asks you which method to use:
-   - **`release` (default):** downloads the pinned release binary with `gh release download`, checks it against the release's `SHA256SUMS`, verifies its GitHub artifact attestation with `gh attestation verify`, requiring the release workflow and the pinned tag, and installs it to `~/.local/bin/crew`.
-   - **`source`:** clones the pinned tag and builds it with `scripts/self-build.sh` inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so the bootstrap checks that the local build matches the release's `SHA256SUMS` byte for byte before it installs it to `~/.local/bin/crew`.
+   - **`release` (default):** downloads the pinned release binary with `gh release download`, checks it against the release's `SHA256SUMS`, verifies its GitHub artifact attestation with `gh attestation verify`, requiring the release workflow and the pinned tag, and installs it to `~/.local/bin/crew`, or `~\.local\bin\crew.exe` on Windows.
+   - **`source`:** clones the pinned tag and builds it with `scripts/self-build.sh`, or `scripts/self-build.ps1` on Windows, inside the official Go container image, so you need no Go toolchain. Builds are reproducible, so the bootstrap checks that the local build matches the release's `SHA256SUMS` byte for byte before it installs it where `release` does.
    - **`go`:** if you already have Go, `go install` at the pinned tag, with the release's build flags. Go checks the module against its checksum database.
 3. Asks you which profile the project uses. It uses a built-in profile only when you name it or accept its proposal; for a stack that no built-in profile covers, it first writes a [custom profile](#custom-profiles) and shows it to you. Before it runs `crew init`, it tells you what that will do on GitHub (the repository it creates, the labels, the push to `main`) and runs it only after you confirm, with your answers and `--install <method>`. It asks the same before any other command that changes your GitHub account. `crew init` takes flags only and never prompts; the agent has the conversation with you.
 4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
 5. Every session, asks whether you want to talk to the PM or the DM, and runs `crew brief` for that role. Only the PM and the DM face you; the lead DM starts Devs and Reviewers.
 
-The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs before running them. Its commands need a POSIX shell, so on Windows they run in WSL.
+The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs before running them. It gives each method as `sh` commands for Linux and macOS and as PowerShell commands for Windows. The agent runs the PowerShell commands in a Windows PowerShell process of their own, so they work whatever shell the harness uses, and need nothing newer than Windows PowerShell 5.1.
 
 ### Upgrading
 
@@ -98,7 +98,7 @@ The DM then opens an **onboarding ticket**, which goes through the normal flow. 
 
 - Git, a container engine (Docker or Podman, with compose) and a GitHub account.
 - An agent harness that reads `AGENTS.md`, runs shell commands, and lets an agent start subagents without your intervention.
-- Linux or macOS. On Windows, use WSL.
+- Linux, macOS or Windows, on amd64 or arm64. Under WSL, `crew` runs as on Linux.
 
 No harness plugins, hooks or MCP servers are required. [Harness wiring](#keeping-the-lead-dm-running) lets the lead DM work without prompting. The lead DM checks for it itself; it needs nothing installed when the harness can wake an agent on a background command's exit.
 
@@ -712,9 +712,9 @@ A knowledge file that `main` does not hold shows as a line such as `=== .crew/do
 
 `.crew/crew.toml` and `profile.toml` use a strict subset of TOML: comments, `[table]` and `[a.b]` headers, bare keys, and values that are basic strings, decimal integers, booleans or one-line arrays of strings. Every file `crew` accepts is valid TOML. Anything outside the subset, and any unknown key, is an error that names the file and line, such as `.crew/crew.toml:7: unsupported value`. The file also records the profile, as `profile = "python"`.
 
-Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte.
+Builds are reproducible. `crew` is built with Go 1.27.2 and the standard library only, with `CGO_ENABLED=0`, `-trimpath` and no VCS stamping, and the version is embedded at build time. `scripts/self-build.sh` builds it inside the official Go container image, pinned by digest, and its output matches the release binary byte for byte. `scripts/self-build.ps1` does the same from PowerShell, with the same output. The repository checks out text files with LF line endings on every platform, so a checkout on Windows builds the same bytes.
 
-Pushing a tag `v<major>.<minor>.<patch>` runs the release workflow, `.github/workflows/release.yml`. It runs the tests, builds `crew` with `scripts/self-build.sh` for Linux and macOS on amd64 and arm64, as `crew-<os>-<arch>`, writes their `SHA256SUMS`, attests each binary's build provenance with GitHub artifact attestations, and publishes them as a GitHub release of the tag. The workflow's actions are pinned by commit. Attestations need a public repository.
+Pushing a tag `v<major>.<minor>.<patch>` runs the release workflow, `.github/workflows/release.yml`. It runs the tests on Linux and on Windows, and checks that Windows PowerShell 5.1 parses the PowerShell build scripts and the bootstrap's PowerShell commands. It then builds `crew` with `scripts/self-build.sh` for Linux, macOS and Windows on amd64 and arm64, as `crew-<os>-<arch>`, with `.exe` for Windows, writes their `SHA256SUMS`, attests each binary's build provenance with GitHub artifact attestations, and publishes them as a GitHub release of the tag. The workflow's actions are pinned by commit. Attestations need a public repository.
 
 `crew` reaches GitHub only through `gh api`, with your own `gh` login. It never reads, prints or stores the token.
 
@@ -804,7 +804,6 @@ Low-priority features that are agreed to be useful but are not part of the first
 | --- | --- |
 | Project versioning | SemVer bumps, releases and changelogs for the user's project. A profile could add them. |
 | More built-in profiles | Candidates: `go`, `static-web`. |
-| Native Windows support | A PowerShell bootstrap. Until then, Windows users use WSL. |
 | No `gh` dependency | Call the GitHub API directly from `crew`, reusing `gh`'s stored login when present. |
 | Respecting the user's CI | Optionally wait for the user's own CI checks before merging, in addition to the gate. |
 | Branch protection | Where the GitHub plan allows it, protect `main` against force pushes and deletion without blocking the DM's fast-forward merges. |

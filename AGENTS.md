@@ -26,7 +26,7 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `internal/` | CLI implementation packages |
 | `profiles/` | Built-in profiles, embedded into the binary |
 | `.github/workflows/release.yml` | The release workflow: builds, checksums, attests and publishes a tagged release |
-| `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `test-containers.sh` runs the tests that need a container engine; `self-build.sh` builds `crew` |
+| `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `test-containers.sh` runs the tests that need a container engine; `self-build.sh` builds `crew`; `go.ps1` and `self-build.ps1` do what `go.sh` and `self-build.sh` do, from PowerShell |
 | `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 
 ## Navigating the code
@@ -38,9 +38,10 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 ## Building and testing
 
 - `crew` is written in Go, using the standard library only. The module path is `github.com/reubenbubu/skeleton-crew`.
-- Go is pinned to 1.27.2, and the container image to `golang:1.27.2` by digest in `scripts/go.sh`. Change both together.
+- Go is pinned to 1.27.2, and the container image to `golang:1.27.2` by digest in `scripts/go.sh`. Change both together. `scripts/go.ps1` reads the image from `scripts/go.sh`.
 - Every build uses `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and `-ldflags "-s -w -buildid= -X main.version=<version>"`, so builds of the same commit are byte-identical.
 - The user's machine needs no Go toolchain; `scripts/self-build.sh` compiles inside the official Go container image. Run tests with `scripts/test.sh`; it fails if any test takes longer than one second.
+- `crew` supports Linux, macOS and Windows. Keep the code portable: build paths with `filepath`, convert with `filepath.ToSlash` for output and git, and never run a host shell; `sh -c` runs only inside containers. A test that needs a stand-in for a program `crew` runs copies the test binary, as `internal/github/exec_test.go` does, rather than writing a shell script. The release workflow runs the tests on Windows. Keep `scripts/go.ps1` and `scripts/self-build.ps1` in step with their `sh` versions, and keep them and the bootstrap's PowerShell blocks within Windows PowerShell 5.1.
 - Commands take time from the injectable clock in `internal/clock` and never call the `time` package for the current time or for waiting. Every polling interval is a parameter.
 - Tests that need a container engine carry the `containers` build tag, so a plain `go test ./...` needs no containers. Only a binary built with that tag lets `compose.Default` run in a test. `scripts/test-containers.sh` builds those test binaries in the Go container image and runs them on the host, where the engine is; they are exempt from the one-second limit. Keep them few and small.
 - Automated tests must not touch real GitHub repositories. All GitHub access goes through `internal/github`, which runs `gh api`. Tests give it the in-memory fake in `internal/github/fakegithub`, which stands in for `gh` and answers with GitHub's JSON and errors. Its `Hook` lets a test change state between two requests, for example to simulate a label race.

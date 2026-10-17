@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs the go command inside the pinned official Go container image, so the
 # host needs no Go toolchain. The repository is mounted at /src.
+# scripts/go.ps1 does the same from PowerShell.
 #
 #   scripts/go.sh test ./...
 #   GOOS=darwin GOARCH=arm64 scripts/go.sh build ./cmd/crew

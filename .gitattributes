@@ -1,0 +1,3 @@
+# Check out text files with LF on every platform, so files embedded in crew
+# are the same bytes everywhere and builds of a commit stay byte-identical.
+* text=auto eol=lf

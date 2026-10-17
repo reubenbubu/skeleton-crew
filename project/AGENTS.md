@@ -8,6 +8,9 @@ Skeleton Crew pins `crew` version `v0.1.1`.
 
 1. Run `crew --version`. If it prints `v0.1.1`, go to step 3.
 2. Otherwise, install `crew` `v0.1.1` with one of the methods below. If `.crew/crew.toml` has an `install` line, use the method it names. If not, ask the user which method to use; `release` is the default. Show the user the exact commands before running them, and stop if any of them fails. If `~/.local/bin` is not on the user's `PATH`, tell them.
+
+   On Linux and macOS, run the `sh` commands. On Windows, run the PowerShell commands in a PowerShell process of their own, whatever shell you use: save them to a temporary `.ps1` file and run `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`.
+
    - **`release`:** downloads the release binary, verifies its checksum and its GitHub artifact attestation, and installs it.
 
      ```sh
@@ -23,7 +26,23 @@ Skeleton Crew pins `crew` version `v0.1.1`.
      )
      ```
 
-   - **`source`:** clones the tag, builds it inside the official Go container image, checks that the build matches the release checksum byte for byte, and installs it. It needs a container engine but no Go toolchain.
+     ```powershell
+     $ErrorActionPreference = 'Stop'
+     $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+     $bin = 'crew-windows-' + @{ AMD64 = 'amd64'; ARM64 = 'arm64' }[$a] + '.exe'
+     $d = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
+     gh release download v0.1.1 --repo reubenbubu/skeleton-crew --pattern $bin --pattern SHA256SUMS --dir $d
+     if ($LASTEXITCODE) { throw 'gh release download failed' }
+     $want = foreach ($l in Get-Content "$d\SHA256SUMS") { $h, $n = $l -split '  ', 2; if ($n -eq $bin) { $h } }
+     if ((Get-FileHash "$d\$bin" -Algorithm SHA256).Hash -ne $want) { throw "checksum mismatch: $bin" }
+     gh attestation verify "$d\$bin" --repo reubenbubu/skeleton-crew `
+       --signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml --source-ref refs/tags/v0.1.1
+     if ($LASTEXITCODE) { throw 'gh attestation verify failed' }
+     New-Item -ItemType Directory -Force -Path "$HOME\.local\bin" | Out-Null
+     Copy-Item "$d\$bin" "$HOME\.local\bin\crew.exe" -Force
+     ```
+
+   - **`source`:** clones the tag, builds it inside the official Go container image, checks that the build matches the release checksum byte for byte, and installs it. It needs a container engine but no Go toolchain. On Windows it builds with `scripts/self-build.ps1`.
 
      ```sh
      (
@@ -39,10 +58,32 @@ Skeleton Crew pins `crew` version `v0.1.1`.
      )
      ```
 
+     ```powershell
+     $ErrorActionPreference = 'Stop'
+     $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+     $bin = 'crew-windows-' + @{ AMD64 = 'amd64'; ARM64 = 'arm64' }[$a] + '.exe'
+     $d = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
+     git clone --quiet --depth 1 --branch v0.1.1 https://github.com/reubenbubu/skeleton-crew "$d\src"
+     if ($LASTEXITCODE) { throw 'git clone failed' }
+     powershell -NoProfile -ExecutionPolicy Bypass -File "$d\src\scripts\self-build.ps1" v0.1.1
+     if ($LASTEXITCODE) { throw 'self-build failed' }
+     gh release download v0.1.1 --repo reubenbubu/skeleton-crew --pattern SHA256SUMS --dir $d
+     if ($LASTEXITCODE) { throw 'gh release download failed' }
+     $want = foreach ($l in Get-Content "$d\SHA256SUMS") { $h, $n = $l -split '  ', 2; if ($n -eq $bin) { $h } }
+     if ((Get-FileHash "$d\src\dist\$bin" -Algorithm SHA256).Hash -ne $want) { throw "checksum mismatch: $bin" }
+     New-Item -ItemType Directory -Force -Path "$HOME\.local\bin" | Out-Null
+     Copy-Item "$d\src\dist\$bin" "$HOME\.local\bin\crew.exe" -Force
+     ```
+
    - **`go`:** for a user who already has Go. Go checks the module against its checksum database and installs `crew` into its own `bin` directory.
 
      ```sh
      GOTOOLCHAIN=go1.27.2 CGO_ENABLED=0 go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.1.1' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.1.1
+     ```
+
+     ```powershell
+     $env:GOTOOLCHAIN = 'go1.27.2'; $env:CGO_ENABLED = '0'
+     go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.1.1' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.1.1
      ```
 
 3. If the project has no `.crew/crew.toml`:

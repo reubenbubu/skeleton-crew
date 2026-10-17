@@ -1,7 +1,8 @@
 # Publishes a release when a version tag such as v0.1.0 is pushed: the crew
-# binaries for linux and darwin on amd64 and arm64, their SHA256SUMS, and a
-# GitHub artifact attestation for each binary. The binaries come from
-# scripts/self-build.sh, so a self-build of the tag gives the same bytes.
+# binaries for linux, darwin and windows on amd64 and arm64, their SHA256SUMS,
+# and a GitHub artifact attestation for each binary. The binaries come from
+# scripts/self-build.sh, so a self-build of the tag gives the same bytes. The
+# tests also run on Windows first, where no Linux container can run.
 name: release
 
 on:
@@ -11,7 +12,44 @@ on:
 permissions: {}
 
 jobs:
+  windows:
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.2
+          cache: false
+
+      - name: Test
+        env:
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+          GOFLAGS: -buildvcs=false
+        run: go test -count=1 ./...
+
+      # Windows PowerShell 5.1 parses the build scripts and the bootstrap's
+      # PowerShell blocks, so they use nothing newer.
+      - name: Parse the PowerShell
+        shell: powershell
+        run: |
+          $sources = @(Get-ChildItem scripts\*.ps1 | ForEach-Object { ,@($_.Name, (Get-Content -Raw $_.FullName)) })
+          $fences = [regex]::Matches((Get-Content -Raw project\AGENTS.md), '(?ms)^ *```powershell\r?\n(.*?)^ *```')
+          foreach ($f in $fences) { $sources += ,@('project/AGENTS.md', $f.Groups[1].Value) }
+          if ($fences.Count -ne 3) { throw "want 3 PowerShell blocks in project/AGENTS.md, found $($fences.Count)" }
+          foreach ($s in $sources) {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseInput($s[1], [ref]$null, [ref]$errors)
+            if ($errors) { $errors | ForEach-Object { "$($s[0]): $_" }; exit 1 }
+          }
+
   release:
+    needs: windows
     runs-on: ubuntu-24.04
     permissions:
       contents: write     # create the release
@@ -36,7 +74,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             GOOS=${target%/*} GOARCH=${target#*/} scripts/self-build.sh "$TAG"
           done
           cd dist && sha256sum crew-* > SHA256SUMS && cat SHA256SUMS
@@ -52,4 +90,5 @@ jobs:
         run: |
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
             --notes "Install it as project/AGENTS.md at $TAG describes." \
-            dist/crew-linux-amd64 dist/crew-linux-arm64 dist/crew-darwin-amd64 dist/crew-darwin-arm64 dist/SHA256SUMS
+            dist/crew-linux-amd64 dist/crew-linux-arm64 dist/crew-darwin-amd64 dist/crew-darwin-arm64 \
+            dist/crew-windows-amd64.exe dist/crew-windows-arm64.exe dist/SHA256SUMS
