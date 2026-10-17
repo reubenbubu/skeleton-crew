@@ -69,7 +69,7 @@ func TestDoctorRunsOneGate(t *testing.T) {
 	if p.exists(".crew/worktrees/gate/doctor") {
 		t.Error("left the worktree behind")
 	}
-	if p.git("worktree", "list", "--porcelain") != "worktree "+p.dir+"\nHEAD "+p.git("rev-parse", "HEAD")+"\nbranch refs/heads/main" {
+	if p.git("worktree", "list", "--porcelain") != "worktree "+filepath.ToSlash(p.dir)+"\nHEAD "+p.git("rev-parse", "HEAD")+"\nbranch refs/heads/main" {
 		t.Error("left a worktree registered")
 	}
 	if slices.ContainsFunc(p.fake.Requests(), func(r string) bool { return strings.Contains(r, "/statuses/") }) {
