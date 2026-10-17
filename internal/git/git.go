@@ -478,6 +478,20 @@ func (r *Repo) AddDetached(path, sha string) error {
 	return err
 }
 
+// MoveDetached moves the worktree at path to commit sha, detached, and
+// drops any changes in it. Unlike AddDetached it keeps the directory, so a
+// container that mounts it keeps a valid mount. It makes a new worktree
+// when path holds none it can move.
+func (r *Repo) MoveDetached(path, sha string) error {
+	if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
+		if _, err := git(path, "checkout", "--quiet", "--force", "--detach", sha); err == nil {
+			_, err = git(path, "clean", "--quiet", "-ffd")
+			return err
+		}
+	}
+	return r.AddDetached(path, sha)
+}
+
 // RemoveWorktree removes the worktree at path, with any changes in it, and
 // whatever else is left at path.
 func (r *Repo) RemoveWorktree(path string) error {

@@ -74,6 +74,10 @@ func GateProject(root string, number int) string { return Project(root, number) 
 // uses in the main checkout at root.
 func DoctorProject(root string) string { return prefix(root) + "-doctor" }
 
+// MainProject is the name of the compose project of the main instance of
+// the main checkout at root.
+func MainProject(root string) string { return prefix(root) + "-main" }
+
 // prefix starts every compose project name of the main checkout at root,
 // an absolute path: crew- and the first 8 hex digits of the path's
 // SHA-256. Two checkouts on one engine so never share a project, even for

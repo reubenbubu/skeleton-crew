@@ -444,7 +444,7 @@ func TestMergeWithDeploymentWorkflow(t *testing.T) {
 func TestMergeJSON(t *testing.T) {
 	p := newDevProject(t)
 	sha := p.approved()
-	if out := p.merge("--json"); out != `{"number":1,"commit":"`+sha+`","rebased":false,"flags":[],"stage":"9:done"}`+"\n" {
+	if out := p.merge("--json"); out != `{"number":1,"commit":"`+sha+`","rebased":false,"flags":[],"stage":"9:done","main":""}`+"\n" {
 		t.Fatalf("got %q", out)
 	}
 }

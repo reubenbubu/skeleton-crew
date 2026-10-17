@@ -128,6 +128,11 @@ func runMerge(args []string, env Env) int {
 	if err := cleanUp(env, r, compose.Project(r, n), filepath.Join(r, filepath.FromSlash(wt))); err != nil {
 		return done(err, false)
 	}
+	// mainAt is the commit the main instance now runs, if it was refreshed.
+	instance, mainAt := refreshMain(env, r, prof, sha), ""
+	if instance != nil {
+		mainAt = sha
+	}
 	if *asJSON {
 		err = output.JSON(env.Stdout, struct {
 			Number  int      `json:"number"`
@@ -135,10 +140,12 @@ func runMerge(args []string, env Env) int {
 			Rebased bool     `json:"rebased"`
 			Flags   []string `json:"flags"`
 			Stage   string   `json:"stage"`
-		}{n, sha, rebased, flagged, stage})
+			Main    string   `json:"main"`
+		}{n, sha, rebased, flagged, stage, mainAt})
 		return finish(env, err, false)
 	}
 	out = append(out, "removed "+wt+" "+compose.Project(r, n))
+	out = append(out, instance...)
 	return done(nil, false)
 }
 

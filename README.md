@@ -24,7 +24,7 @@ The PM owns *what and why*. The DM owns *how*. The DM never waits for you or the
 3. The DM picks the next eligible ticket, chooses a model tier and starts a Dev.
 4. The Dev works in its own git worktree and container environment, commits, and opens a PR.
 5. `crew` runs the gate on the exact pushed commit. A Reviewer checks the PR against the ticket.
-6. The DM merges approved PRs one at a time. If continuous deployment is configured, a GitHub Actions workflow deploys `main`.
+6. The DM merges approved PRs one at a time. A local [main instance](#main-instance) of the app restarts on the new `main`, at ports that never change. If continuous deployment is configured, a GitHub Actions workflow deploys `main`.
 
 ## Getting started
 
@@ -63,7 +63,7 @@ crew init --profile <name> [--install release|source|go] [--harness <name>] [--r
 
 1. **Repository:** uses the existing git repository and its `origin`. Without a git repository it runs `git init -b main`. Without an `origin` it creates the GitHub repository, private unless `--public` is given, and adds it as `origin`. `--repo` names the new repository; by default it is the directory's name under your `gh` login. `origin` uses SSH when `gh` is configured for SSH, and HTTPS otherwise.
 2. **Labels:** creates the `stage:`, `priority:`, `kind:`, `tier:` and `testing:` labels and `blocked`. Running it again is safe.
-3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)) and the install method as `install = "<method>"`, `release` unless `--install` names another, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*` and `.crew/events.*` to `.gitignore`.
+3. **Crew files:** writes `.crew/crew.toml`, with default models for the detected harness (see [Models](#models)) and the install method as `install = "<method>"`, `release` unless `--install` names another, seeds `.crew/docs/` from the profile, and adds `.crew/worktrees/`, `.crew/logs/`, `.crew/lead.lock*`, `.crew/events.*`, `.crew/ports.toml` and `.crew/main.off` to `.gitignore`.
 4. **Application files:** for a new project only, writes the profile's `Containerfile`, `compose.yaml` and starter scaffold. A project is new when its directory holds nothing besides `.git`, `AGENTS.md`, `.crew/` and `.gitignore`.
 5. **Commit:** commits only the files it created, and a custom profile's directory when it has uncommitted changes, and pushes them to `main`, with the message `Set up Skeleton Crew`. The output names each file written as `wrote <path>` and the custom profile as `added .crew/profiles/<name>`. Your own uncommitted changes are left alone.
 6. **Check:** runs `crew doctor`, including one gate run.
@@ -637,6 +637,37 @@ The application always runs in containers, never directly on the host. Agents ru
 
 Skeleton Crew never deploys anything itself. A profile may include a GitHub Actions deployment workflow that runs on every push to `main`. It is `.github/workflows/deploy.yml` or `.github/workflows/deploy.yaml`, and `crew` looks for it in the merged commit. The crew only reads that workflow's status to move tickets through `8:deploying` to `9:done`, as described in [Session recovery](#session-recovery). Without a deployment workflow, merging finishes the ticket.
 
+## Main instance
+
+`crew` keeps one instance of the app running on your machine at the head of `main`, so you can always try what the crew has merged. It runs only when the profile has a `run` command, and it is on by default. Without one, `crew main up` refuses with `no main instance: the <profile> profile has no run command`, and `crew merge` skips the refresh.
+
+- It runs from a detached worktree at `.crew/worktrees/main`, in the compose project `crew-<id>-main`, which the leftover removal in [Session recovery](#session-recovery) never touches.
+- `crew merge` refreshes it after every merge: it checks the new `main` out in the same worktree, then runs `up -d --build --force-recreate --renew-anon-volumes`, so the app restarts on the new code and takes its dependencies from the new image. A refresh that fails prints a warning such as `warning: main instance not refreshed: up: exit 1; run crew main up` on stderr. The merge still stands.
+- Its volumes are kept across refreshes, so its data, such as a database, survives. Migrations apply forward. `crew main down --volumes` discards the data.
+- `crew main down` stops it and writes `.crew/main.off`, so later merges leave it stopped. `crew main up` removes `.crew/main.off` and starts it again.
+
+### Ports
+
+The main instance's host ports are in `.crew/ports.toml`, which is not committed. `crew` writes the file the first time the main instance starts and never changes it afterwards. Each port the profile's `compose.yaml` publishes gets the same host port, on `127.0.0.1` only:
+
+```toml
+# Host ports of the main instance. crew writes this file once and never changes it.
+[app]
+3000 = 3000
+```
+
+A table is a compose service, and each key is a container port with its host port as the value. To move a port, for example because another program already uses it, edit its value and run `crew main up`. A service the file lists publishes exactly the ports listed; a service it does not list keeps the ports the container engine picks. To have `crew` write the file again, for example after `compose.yaml` publishes a new port, delete it and run `crew main up`.
+
+`crew main up` and `crew merge` pass the ports to compose in a generated file, `.crew/worktrees/main.ports.yaml`, that replaces each listed service's `ports` with compose's `!override` tag. `compose.yaml` itself is unchanged, and ticket environments still get ports the engine picks. When the file is first written, the main instance starts once with the ports the engine picks, `crew` reads them from `ps --format json`, writes the file and starts it again with the fixed ports.
+
+`crew main up` prints the commit, then one line per published port with the service, the container port and the address on your machine:
+
+```
+$ crew main up
+main 3f9a2c1 up
+app 3000 127.0.0.1:3000
+```
+
 ## Prompts and project knowledge
 
 You never need to edit configuration or prompts. Everything works with defaults, and the agents adapt to your project as they go.
@@ -657,8 +688,10 @@ AGENTS.md                 the seed file
   lead.lock               which DM session holds the lead; not committed
   events.read             when crew events last read; not committed
   events.wait             which crew events --wait is the current one; not committed
+  ports.toml              host ports of the main instance; not committed
+  main.off                present while the main instance is turned off; not committed
   logs/                   full gate output; not committed, the newest 50 kept
-  worktrees/              one worktree per ticket in flight; not committed
+  worktrees/              one worktree per ticket in flight, and the main instance's; not committed
   docs/
     product.md            PM: what the product is, its users, glossary, your standing preferences
     architecture.md       DM: modules, boundaries, data model
@@ -759,7 +792,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer, and posts the reason as a `review` comment by `dm`; one appeal per attempt, refused when the attempt ended with `crew ticket stuck` |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up to at most `max_tier`; enforces `top_attempts` |
 | `crew ticket split <n> "<title>" "<title>"...` | Creates one child ticket per title, at least two, at `2:drafting`, for the PM to complete, and cancels the parent |
-| `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`, and to `9:done` without a deployment workflow; rebases and gates again if `main` moved, then fast-forwards `main`. Also accepts a ticket at `6:pending-merge`. Refused when the branch is not at the approved commit or a rebase of it |
+| `crew merge <n>` | `5:review-approved` to `6:pending-merge` to `7:merged`, and to `9:done` without a deployment workflow; rebases and gates again if `main` moved, then fast-forwards `main` and refreshes the [main instance](#main-instance) unless it is turned off. Also accepts a ticket at `6:pending-merge`. Refused when the branch is not at the approved commit or a rebase of it |
 | `crew ticket cancel <n>` | Any open stage to `0:cancelled`, and closes the issue as not planned |
 | `crew ticket fix <n> "<title>"` | For a deployment that failed because of the code: opens a `fix` ticket at `high` and `2:drafting`, and moves `n` from `7:merged` or `8:deploying` to `9:done` and closes it |
 | `crew status --as dm --lead <token>` | The DM's status; also advances deployments and removes leftover worktrees and compose projects; see [Session recovery](#session-recovery) |
@@ -795,6 +828,9 @@ Run inside the ticket's worktree.
 | `crew ticket comment <n> --kind <kind> --as <role> "<text>"` | Posts a tagged comment |
 | `crew ticket block <n> --as <role> "<reason>"` | Sets the `blocked` flag and posts the reason as a `question` comment by the role, `pm` or `dm`, so `crew status` shows it to you |
 | `crew ticket unblock <n>` | Clears the `blocked` flag |
+| `crew main up` | Starts or refreshes the [main instance](#main-instance) at the head of `main` and turns it on; prints its ports |
+| `crew main down [--volumes]` | Stops the main instance and turns it off, so merges leave it stopped; `--volumes` also discards its data |
+| `crew main logs` | Prints the main instance's logs |
 
 ## Later
 

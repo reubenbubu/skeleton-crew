@@ -85,6 +85,7 @@ A review rejection, or a Dev that runs `crew ticket stuck`, is a failed attempt.
 - A failed gate also leaves the ticket at `6:pending-merge`.
 - No Dev works at stage 6. For a conflict that is not trivial, or a gate that fails after the rebase, cancel the ticket with `crew ticket cancel` and open a new one with `crew ticket new`. In its `## Assumptions`, name the cancelled ticket and its branch, `origin/<branch>`, so the new ticket's Dev can reuse the work. Ask the PM to copy the goal and write the criteria under the new number. The gate flags tests that name the cancelled ticket's criteria as `cancelled`; the new ticket's Dev renames them.
 - If a step after the push to `main` fails, `crew merge` reports it after the line `merged <commit> into main`. Finish the remaining steps yourself.
+- After each merge, `crew merge` refreshes the main instance, a local run of `main` at fixed ports, unless `crew main down` turned it off. A warning `main instance not refreshed` does not undo the merge: find the cause in `crew main logs` and run `crew main up`. When a port is already in use, ask the user which port to use instead, change it in `.crew/ports.toml` and run `crew main up`. When the user asks where to try the app, run `crew main up` and give them the addresses it prints.
 
 ## Deployment
 

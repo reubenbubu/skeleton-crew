@@ -216,7 +216,7 @@ func TestInitNewProject(t *testing.T) {
 		t.Errorf("crew.toml:\n%s", got)
 	}
 	ignore := p.read(".gitignore")
-	for _, line := range []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock*", ".crew/events.*", "__pycache__/"} {
+	for _, line := range []string{".crew/worktrees/", ".crew/logs/", ".crew/lead.lock*", ".crew/events.*", ".crew/ports.toml", ".crew/main.off", "__pycache__/"} {
 		if !slices.Contains(strings.Split(ignore, "\n"), line) {
 			t.Errorf(".gitignore lacks %s:\n%s", line, ignore)
 		}
@@ -326,7 +326,7 @@ func TestInitAppendsToExistingGitignore(t *testing.T) {
 	p.git("commit", "-q", "-m", "ignore")
 	p.git("push", "-q", "origin", "main")
 	p.mustInit("--profile", "python")
-	if got := p.read(".gitignore"); got != "dist/\n.crew/logs/\n.crew/worktrees/\n.crew/lead.lock*\n.crew/events.*\n" {
+	if got := p.read(".gitignore"); got != "dist/\n.crew/logs/\n.crew/worktrees/\n.crew/lead.lock*\n.crew/events.*\n.crew/ports.toml\n.crew/main.off\n" {
 		t.Errorf(".gitignore:\n%s", got)
 	}
 }
