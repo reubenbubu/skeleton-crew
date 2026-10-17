@@ -106,7 +106,7 @@ type status struct {
 type run struct {
 	id                                          int64
 	name, path, branch, sha, status, conclusion string
-	created                                     time.Time
+	created, updated                            time.Time
 }
 
 // New returns an empty fake repository, given as owner/name, whose
@@ -318,7 +318,7 @@ func (g *GitHub) AddWorkflowRun(name, branch, sha, status, conclusion string) in
 		path += ".yml"
 	}
 	id := g.id()
-	g.runs = append(g.runs, &run{id: id, name: strings.TrimSuffix(strings.TrimSuffix(name, ".yml"), ".yaml"), path: path, branch: branch, sha: sha, status: status, conclusion: conclusion, created: g.clock.Now()})
+	g.runs = append(g.runs, &run{id: id, name: strings.TrimSuffix(strings.TrimSuffix(name, ".yml"), ".yaml"), path: path, branch: branch, sha: sha, status: status, conclusion: conclusion, created: g.clock.Now(), updated: g.clock.Now()})
 	return id
 }
 
@@ -329,7 +329,7 @@ func (g *GitHub) SetWorkflowRun(id int64, status, conclusion string) {
 	defer g.mu.Unlock()
 	for _, r := range g.runs {
 		if r.id == id {
-			r.status, r.conclusion = status, conclusion
+			r.status, r.conclusion, r.updated = status, conclusion, g.clock.Now()
 		}
 	}
 }
@@ -1116,7 +1116,7 @@ func (g *GitHub) listRuns(w http.ResponseWriter, r *http.Request) {
 			"id": run.id, "node_id": "WFR_kwDOfake", "name": run.name, "path": run.path, "head_branch": run.branch,
 			"head_sha": run.sha, "event": "push", "status": run.status, "conclusion": nullable(run.conclusion),
 			"html_url":   "https://github.com/" + g.repo + "/actions/runs/" + strconv.FormatInt(run.id, 10),
-			"created_at": ts(run.created),
+			"created_at": ts(run.created), "updated_at": ts(run.updated),
 		})
 	}
 	reply(w, http.StatusOK, map[string]any{"total_count": len(out), "workflow_runs": page(r, out)})

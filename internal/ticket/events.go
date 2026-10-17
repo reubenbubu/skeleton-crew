@@ -24,8 +24,9 @@ var wakes = []string{"3:eligible", "4:waiting-review", "4:review-rejected", "5:r
 // Events lists what happened on open tickets from since to now, both
 // included, that the lead DM acts on: a ticket reaching a stage in wakes,
 // blocked cleared, a Dev question, an answer that is not the DM's, a human
-// comment, and a ticket at a DM stage going stale. The lead DM's own work
-// is left out. They are sorted by time, then by ticket.
+// comment, a ticket at a DM stage going stale, and the newest deployment
+// run of a ticket at 7:merged or 8:deploying finishing. The lead DM's own
+// work is left out. They are sorted by time, then by ticket.
 func Events(c *github.Client, since, now time.Time) ([]Event, error) {
 	issues, err := c.Issues("open")
 	if err != nil {
@@ -40,6 +41,17 @@ func Events(c *github.Client, since, now time.Time) ([]Event, error) {
 		f := fieldsOf(i)
 		if f.Stage == "" {
 			continue
+		}
+		// A run finishing changes nothing on the issue, so it is looked up
+		// whether or not the issue changed.
+		if f.Stage == "7:merged" || f.Stage == "8:deploying" {
+			_, run, err := deployment(c, i, f)
+			if err != nil {
+				return nil, err
+			}
+			if run != nil && run.Status == "completed" && in(run.UpdatedAt) {
+				add(run.UpdatedAt, i.Number, "deployment finished: "+run.Conclusion)
+			}
 		}
 		// An issue's updated_at is never earlier than its last stage
 		// change, so one that cannot have gone stale since needs no events.

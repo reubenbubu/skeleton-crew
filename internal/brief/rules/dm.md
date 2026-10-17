@@ -27,7 +27,7 @@ The recommended setup is one lead DM session that does the work, and a conversat
 
 Without wiring, you act only when the user prompts you. With it, you wake when something happens.
 
-- `crew events --lead <token>` reports what changed since its previous call, one line per event, such as `2026-10-16T09:12Z #12 reached 4:waiting-review`, and marks it read. Events are a ticket becoming eligible, a Dev or Reviewer finishing, a Dev question, a question answered or a human comment, and a handoff going stale. Your own work is no event.
+- `crew events --lead <token>` reports what changed since its previous call, one line per event, such as `2026-10-16T09:12Z #12 reached 4:waiting-review`, and marks it read. Events are a ticket becoming eligible, a Dev or Reviewer finishing, a Dev question, a question answered or a human comment, a handoff going stale, and a deployment finishing, such as `#11 deployment finished: failure`. Your own work is no event.
 - `crew events --wait --lead <token>` blocks until something is unread, then exits without printing anything or marking anything read. Each new `--wait` replaces the previous one, which exits quietly.
 - If your harness wakes you when a background command exits: start `crew events --wait --lead <token>` in the background and end your turn. When it exits, run `crew events --lead <token>`, do the work, and start a new wait. Start a wait only after your previous wait has exited, and only as lead. If `crew events` is refused with `not-lead`, start no wait.
 - Every time you start as lead, check your wiring:
@@ -46,12 +46,12 @@ Without wiring, you act only when the user prompts you. With it, you wake when s
 
 Run this cycle as lead each time your wait exits. Without working wiring, run it each time the user prompts you.
 
-1. Run `crew events --lead <token>` and handle each event: answer a Dev question, act on an answer or a human comment, start a Reviewer for `4:waiting-review`, retry or appeal a rejection. For a stale handoff, run `crew status --as dm --lead <token>` and act on that ticket's proposal.
+1. Run `crew events --lead <token>` and handle each event: answer a Dev question, act on an answer or a human comment, start a Reviewer for `4:waiting-review`, retry or appeal a rejection. For a stale handoff or a finished deployment, run `crew status --as dm --lead <token>`: it moves a deployed ticket to `9:done`, and otherwise act on that ticket's proposal, such as `triage the deployment: failure`.
 2. Merge every approved ticket, one at a time. Merging before starting new work keeps rebases small.
 3. Start eligible tickets that do not collide with work in flight, until the parallel cap.
 4. Start a new wait and end your turn.
 
-Run `crew status` when you start as lead, for a stale handoff, or when the user asks, not on every wake: events already say what changed, and your context should grow only with work done.
+Run `crew status` when you start as lead, for a stale handoff or a finished deployment, or when the user asks, not on every wake: events already say what changed, and your context should grow only with work done.
 
 ## Selecting work
 

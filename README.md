@@ -472,12 +472,12 @@ You can have several DM sessions open at once, but only one of them, the **lead*
 
 The lead DM works in a fixed cycle each time its wait for events exits, or, without working wiring, each time you prompt it:
 
-1. Handle the events from `crew events`: answer Dev questions, act on answers and human comments, start Reviewers, retry or appeal rejections, and act on the recovery proposal of a ticket whose handoff went stale.
+1. Handle the events from `crew events`: answer Dev questions, act on answers and human comments, start Reviewers, retry or appeal rejections, and act on the recovery proposal of a ticket whose handoff went stale or whose deployment finished.
 2. Merge what is approved, one ticket at a time. Merging before starting new work keeps rebases small.
 3. Start eligible tickets that do not collide with work in flight, until the parallel cap.
 4. Start a new wait.
 
-It runs `crew status` in full only when it starts as lead, for a stale handoff, or when you ask, so its context grows with work done, not with each wake.
+It runs `crew status` in full only when it starts as lead, for a stale handoff or a finished deployment, or when you ask, so its context grows with work done, not with each wake.
 
 ### The lead can never lock the system
 
@@ -521,9 +521,10 @@ $ crew events --lead 3f9a0c1e5b7d42a8961e0f3c2b4d6a81
 2026-10-16T09:30Z #14 unblocked
 2026-10-16T09:31Z #14 comment by the-user: Use Stripe.
 2026-10-16T10:12Z #12 stale at 4:waiting-review: no reviewer
+2026-10-16T10:40Z #11 deployment finished: failure
 ```
 
-- **Events** are the ones the lead DM must act on, on open tickets: a ticket reaching `3:eligible`; a Dev or Reviewer finishing, which is a ticket reaching `4:waiting-review`, `4:review-rejected` or `5:review-approved`, or a Dev `question`; a question being answered, which is `blocked` being cleared, an `answer` comment that is not the DM's, or a human comment; and a handoff going stale at a DM stage, at the time the [stale table](#status) gives. The lead DM's own work, such as starting a Dev or merging, is no event.
+- **Events** are the ones the lead DM must act on, on open tickets: a ticket reaching `3:eligible`; a Dev or Reviewer finishing, which is a ticket reaching `4:waiting-review`, `4:review-rejected` or `5:review-approved`, or a Dev `question`; a question being answered, which is `blocked` being cleared, an `answer` comment that is not the DM's, or a human comment; a handoff going stale at a DM stage, at the time the [stale table](#status) gives; and the newest deployment run of a ticket at `7:merged` or `8:deploying` finishing, with its conclusion, such as `deployment finished: success`, at the time GitHub last updated the run. A run started again is reported again when it finishes. The lead DM's own work, such as starting a Dev or merging, is no event.
 - **Read state** is local: `.crew/events.read` in the main checkout records the time of the last call, and the next call reports what happened from then on. Event times are GitHub's timestamps, to the second, compared with the local clock, which must be in sync. An event in the same second as a call is reported again by the next call, and wakes the next wait at once; none is missed. The first call in a checkout reports nothing and starts the record. A missing or unreadable record counts as none, with a warning.
 - `crew events` is lead-only, so a session that has lost the lead cannot mark events read that the new lead has not seen.
 
@@ -575,7 +576,7 @@ Records are kept per harness, so a project used from several harnesses has one r
 
 Whether it is `crew events --wait` or the lead DM's own, the wiring must:
 
-1. **Be event-driven.** The lead DM wakes only when something happened: a Dev or Reviewer finished, a ticket became eligible, a question was answered, or a handoff went stale. Context then grows with work done, not with time. Compaction is safe because all state is on GitHub.
+1. **Be event-driven.** The lead DM wakes only when something happened: a Dev or Reviewer finished, a ticket became eligible, a question was answered, a handoff went stale, or a deployment finished. Context then grows with work done, not with time. Compaction is safe because all state is on GitHub.
 2. **Live inside the harness.** No cron jobs, system services or other processes outside the harness. A wait left behind when a session ends may keep running inside the harness until it is replaced.
 3. **Leave you in control.** It stops when the session closes or when you say so, and never blocks you from talking to a DM.
 4. **Be verifiable.** `crew doctor` checks that `.crew/crew.toml` records wiring for the harness in use. The self-test is the live check.

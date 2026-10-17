@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
 )
@@ -220,4 +221,45 @@ func TestStatusLeadUsage(t *testing.T) {
 	p.refused(2, "--lead needs --as dm", "status", "--lead", p.token)
 	p.refused(2, "--lead needs --as dm", "status", "--as", "pm", "--lead", p.token)
 	p.refused(1, otherLead, "status", "--as", "dm", "--lead", "")
+}
+
+// A deployment run finishing wakes the lead, also after the ticket's stale
+// event was read, and each finish is reported once.
+func TestFinishedDeploymentIsAnEvent(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.deployed("deploy.yml")
+	p.clock.Advance(time.Second)
+	p.ok("events", "--lead", p.token)
+	run := p.fake.AddWorkflowRun("deploy", "main", sha, "in_progress", "")
+	p.clock.Advance(2 * time.Hour)
+	if out := p.ok("events", "--lead", p.token); !strings.HasSuffix(out, " #1 stale at 7:merged: no deployment\n") || strings.Contains(out, "deployment finished") {
+		t.Fatalf("got %q", out)
+	}
+
+	wait := p.background("events", "--wait", "--lead", p.token)
+	p.clock.BlockUntil(1)
+	p.clock.Advance(poll)
+	p.clock.BlockUntil(1)
+	running(t, wait)
+	p.fake.SetWorkflowRun(run, "completed", "failure")
+	p.clock.Advance(poll)
+	quiet(t, wait)
+	if out := p.ok("events", "--lead", p.token); out != "2026-01-01T02:00Z #1 deployment finished: failure\n" {
+		t.Fatalf("got %q", out)
+	}
+	if out := p.ok("events", "--lead", p.token); out != "no events\n" {
+		t.Fatalf("again: got %q", out)
+	}
+
+	// The DM fixed the pipeline and ran it again.
+	p.clock.Advance(time.Minute)
+	p.fake.SetWorkflowRun(run, "in_progress", "")
+	if out := p.ok("events", "--lead", p.token); out != "no events\n" {
+		t.Fatalf("running: got %q", out)
+	}
+	p.clock.Advance(time.Minute)
+	p.fake.SetWorkflowRun(run, "completed", "success")
+	if out := p.ok("events", "--lead", p.token); !strings.HasSuffix(out, " #1 deployment finished: success\n") || strings.Count(out, "\n") != 1 {
+		t.Fatalf("success: got %q", out)
+	}
 }

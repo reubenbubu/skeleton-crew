@@ -73,6 +73,7 @@ type WorkflowRun struct {
 	HeadSHA    string    `json:"head_sha"`
 	Event      string    `json:"event"`
 	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"` // when a completed run finished
 }
 
 func (c *Client) CreatePullRequest(n NewPullRequest) (PullRequest, error) {
