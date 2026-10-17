@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/reubenbubu/skeleton-crew/internal/sharedfile"
 	"github.com/reubenbubu/skeleton-crew/internal/toml"
 )
 
@@ -69,7 +70,7 @@ var errUnreadable = errors.New("cannot read")
 
 // value reads the one string key of the file at rel in root.
 func value(root, rel, key string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(root, rel))
+	b, err := sharedfile.Read(filepath.Join(root, rel))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return "", err

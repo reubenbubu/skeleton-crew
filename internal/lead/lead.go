@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/reubenbubu/skeleton-crew/internal/output"
+	"github.com/reubenbubu/skeleton-crew/internal/sharedfile"
 	"github.com/reubenbubu/skeleton-crew/internal/toml"
 )
 
@@ -50,7 +51,7 @@ var token = regexp.MustCompile(`^[0-9a-f]{32}$`)
 // read reads the lock in root. A missing lock is no lead. An unreadable one
 // is no lead too, and warning says why.
 func read(root string) (l *Lead, warning string, err error) {
-	b, err := os.ReadFile(filepath.Join(root, Path))
+	b, err := sharedfile.Read(filepath.Join(root, Path))
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return nil, "", nil

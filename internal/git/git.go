@@ -168,7 +168,7 @@ func (r *Repo) mainWorktree() (string, error) {
 		if d, ok := strings.CutPrefix(line, "worktree "); ok {
 			dir = d
 		} else if line == "branch refs/heads/main" {
-			return dir, nil
+			return filepath.FromSlash(dir), nil
 		}
 	}
 	return "", nil
@@ -184,7 +184,8 @@ func Toplevel(dir string) (string, error) {
 		}
 		return "", err
 	}
-	return top, nil
+	// git prints paths with forward slashes on every platform.
+	return filepath.FromSlash(top), nil
 }
 
 // Init makes dir a new repository whose branch is main.
@@ -289,7 +290,7 @@ func MainRoot(dir string) (string, error) {
 	}
 	// The main worktree is always listed first.
 	first, _, _ := strings.Cut(out, "\n")
-	return strings.TrimPrefix(first, "worktree "), nil
+	return filepath.FromSlash(strings.TrimPrefix(first, "worktree ")), nil
 }
 
 // AddWorktree fetches from origin, unless this Repo already has, and checks
