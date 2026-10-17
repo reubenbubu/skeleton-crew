@@ -87,8 +87,14 @@ func runMerge(args []string, env Env) int {
 	if err != nil {
 		return done(err, false)
 	}
+	// lost stops the merge before a step that changes state once another
+	// session has taken the lead.
+	lost := func() error { return checkToken(env, r, *token) }
 	rebased := !upToDate
 	if rebased {
+		if err := lost(); err != nil {
+			return done(err, false)
+		}
 		if sha, err = rebase(r, repo, n, branch, base, sha); err != nil {
 			return done(err, false)
 		}
@@ -105,6 +111,9 @@ func runMerge(args []string, env Env) int {
 		}
 		out = append(out, append(flagged, "gate passed "+sha[:7])...)
 	}
+	if err := lost(); err != nil {
+		return done(err, false)
+	}
 	// Without force, origin takes only a fast-forward of main.
 	if err := repo.Push(sha, "main", ""); err != nil {
 		return done(err, false)
@@ -118,13 +127,19 @@ func runMerge(args []string, env Env) int {
 		return done(err, false)
 	}
 	deploy := slices.ContainsFunc(files, func(f string) bool { return slices.Contains(ticket.DeployWorkflows, f) })
-	stage, err := ticket.Merged(c, n, deploy)
 	out = append(out, "merged "+sha[:7]+" into main")
+	if err := lost(); err != nil {
+		return done(err, false)
+	}
+	stage, err := ticket.Merged(c, n, deploy)
 	if err != nil {
 		return done(err, false)
 	}
 	out = append(out, fmt.Sprintf("#%d stage=%s", n, stage))
 	wt := path.Join(".crew", "worktrees", branch)
+	if err := lost(); err != nil {
+		return done(err, false)
+	}
 	if err := cleanUp(env, r, compose.Project(r, n), filepath.Join(r, filepath.FromSlash(wt))); err != nil {
 		return done(err, false)
 	}

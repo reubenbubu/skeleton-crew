@@ -53,6 +53,9 @@ func runStatus(args []string, env Env) int {
 	// A failed removal stops the removals; the status is still shown.
 	var cleanErr error
 	if lead {
+		cleanErr = checkLead(env, *token)
+	}
+	if lead && cleanErr == nil {
 		var changes []ticket.Change
 		changes, cleanErr = removeLeftovers(env, s.Board)
 		s.Changes = append(s.Changes, changes...)

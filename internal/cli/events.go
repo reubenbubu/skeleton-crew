@@ -33,13 +33,19 @@ func runEvents(args []string, env Env) int {
 	case *wait && *asJSON:
 		err = usageError{"--json does not go with --wait"}
 	}
+	var r string
 	if err == nil {
+		r, err = root(env)
+	}
+	// A wait takes no operation lock: it would hold off every other lead
+	// command, and a takeover, for as long as it waits.
+	switch {
+	case err != nil:
+	case *wait:
+		err = checkToken(env, r, *token)
+	default:
 		err = checkLead(env, *token)
 	}
-	if err != nil {
-		return finish(env, err, false)
-	}
-	r, err := root(env)
 	if err != nil {
 		return finish(env, err, false)
 	}

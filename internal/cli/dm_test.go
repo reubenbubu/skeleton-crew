@@ -8,6 +8,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/reubenbubu/skeleton-crew/internal/lead"
+	"github.com/reubenbubu/skeleton-crew/internal/oplock"
 )
 
 const (
@@ -204,4 +208,60 @@ func TestDMCommandUsage(t *testing.T) {
 	p.refused(2, "unknown command: dm bogus", "dm", "bogus")
 	p.refused(2, "unknown flag: --bogus", "dm", "claim", "--bogus")
 	p.refused(2, "unexpected argument: x", "dm", "release", "x")
+}
+
+// A takeover while crew merge gates stops the merge before it pushes to
+// main: the old lead changes nothing more.
+func TestTakeoverStopsAMerge(t *testing.T) {
+	p := newDevProject(t)
+	p.approved()
+	other := p.pushMain("docs/notes.md", "notes\n")
+	p.box.answer = func(dir string, args []string) (string, int) {
+		if _, _, err := lead.Claim(p.main, p.clock.Now(), true); err != nil {
+			t.Error(err)
+		}
+		p.box.answer = nil
+		return "", 0
+	}
+	code, out, errOut := p.run("merge", "1", "--lead", p.token)
+	if code != 1 || !strings.HasPrefix(out, "rebased ") || strings.Contains(out, "merged") || !strings.HasPrefix(errOut, "not-lead: ") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	if got := gitIn(t, p.origin, "rev-parse", "main"); got != other {
+		t.Fatalf("origin main at %s; want %s", got, other)
+	}
+	p.stage("6:pending-merge")
+	if _, err := os.Stat(filepath.Join(p.main, worktree)); err != nil {
+		t.Fatalf("worktree removed: %v", err)
+	}
+}
+
+// One lead-only command at a time: another waits for the operation lock,
+// and a wait for events does not.
+func TestLeadCommandsWaitForTheOperationLock(t *testing.T) {
+	p := newTicketProject(t)
+	token := p.claim()
+	path := filepath.Join(p.dir, OperationPath)
+	holder, ok, err := oplock.TryLock(path, "crew merge 12 pid 99 since 2026-01-01T00:00Z")
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	quiet(t, p.background("events", "--wait", "--lead", token))
+	events := p.background("events", "--lead", token)
+	p.clock.BlockUntil(1)
+	running(t, events)
+	holder.Release()
+	p.clock.Advance(time.Second)
+	if r := <-events; r.code != 0 || r.out != "no events\n" || r.errOut != "waiting for crew merge 12 pid 99 since 2026-01-01T00:00Z to finish\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if got := oplock.Holder(path); !strings.HasPrefix(got, "crew events pid ") {
+		t.Fatalf("holder %q", got)
+	}
+	// Released when the command ended.
+	l, ok, err := oplock.TryLock(path, "x")
+	if err != nil || !ok {
+		t.Fatalf("after: %v %v", ok, err)
+	}
+	l.Release()
 }

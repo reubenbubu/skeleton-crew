@@ -483,7 +483,10 @@ It runs `crew status` in full only when it starts as lead, for a stale handoff o
 
 No internal mechanism may stop the crew from making progress. For the lead this means:
 
-- **Takeover always works.** Any DM can take the lead with `crew dm claim --takeover` once you confirm. The old token stops working immediately. A dead session or a lost token costs at most one confirmation from you.
+- **Takeover always works.** Any DM can take the lead with `crew dm claim --takeover` once you confirm. The old token stops working at once, and the takeover never waits. A dead session or a lost token costs at most one confirmation from you.
+- **One lead-only command at a time.** Each lead-only command, except `crew events --wait`, holds the operation lock `.crew/lead.lock.op` while it runs. Another lead-only command waits for it and prints one line, such as `waiting for crew merge 12 pid 4242 since 2026-10-16T09:12Z to finish`. The operating system holds the lock for the process and releases it when the process ends, however it ends, so the lock is never left behind. A command checks the token before it waits and again once it holds the lock.
+- **A takeover stops the old lead's work.** `crew merge` checks the token again before each step that changes state: the rebase, the push to `main`, the stage move and the cleanup. `crew status --lead` checks it again before removing leftovers. After a takeover, the old lead's command stops at its next such step with `not-lead`, and the new lead's commands wait until it has stopped, so the two never act at once. A step already under way, such as a push, finishes; a merge stopped after its push leaves the ticket at `6:pending-merge`, and `crew merge` finishes it. If the wait goes on, the line names the process: the old session is still running it, and closing that session ends the wait.
+- `crew events --wait` takes no operation lock, because it would hold off every other lead-only command, and a takeover's first command, for as long as it waits.
 - A lead that has lost its own token takes over from itself the same way.
 - If the old lead was still alive, its next lead-only command gets `not-lead` and it continues as a conversational DM. No work is lost, because all state is on GitHub.
 - Every state change is a check-and-set on the stage label, such as "move #12 from 5 to 6 only if it is still at 5". If two DMs race during a takeover, one succeeds and the other gets `stage-changed`. Nothing happens twice.
@@ -711,6 +714,7 @@ AGENTS.md                 the seed file
   crew.toml               configuration
   profiles/<name>/        a custom profile, if the project has one
   lead.lock               which DM session holds the lead; not committed
+  lead.lock.op            held by the lead-only command that is running; not committed
   events.read             when crew events last read; not committed
   events.wait             which crew events --wait is the current one; not committed
   ports.toml              host ports of the main instance; not committed

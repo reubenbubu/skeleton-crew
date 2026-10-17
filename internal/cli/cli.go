@@ -13,6 +13,7 @@ import (
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/doctor"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
+	"github.com/reubenbubu/skeleton-crew/internal/oplock"
 	"github.com/reubenbubu/skeleton-crew/internal/output"
 )
 
@@ -31,11 +32,34 @@ type Env struct {
 	HealthTimeout  time.Duration           // how long the gate tries health
 	EventsPoll     time.Duration           // how often crew events --wait looks
 	EventsTest     time.Duration           // how long crew events --wait --test waits
+	LockPoll       time.Duration           // how often a lead-only command tries the operation lock
+
+	op *operation // the operation lock this run holds, set by Run
+}
+
+// operation is the operation lock of one run of crew, taken by its first
+// lead check and released when the run ends.
+type operation struct {
+	what string // the command words, without flags, such as merge 12
+	lock *oplock.Lock
 }
 
 // Run executes crew with args, which exclude the program name, and returns
 // the exit code.
 func Run(args []string, env Env) int {
+	var words []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			break
+		}
+		words = append(words, a)
+	}
+	env.op = &operation{what: strings.Join(words, " ")}
+	defer func() {
+		if env.op.lock != nil {
+			env.op.lock.Release()
+		}
+	}()
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, ok := commands[args[0]]
 		if !ok {

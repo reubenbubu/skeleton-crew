@@ -121,7 +121,7 @@ func (p *project) run(args ...string) (code int, stdout, stderr string) {
 	env := Env{
 		Version: "v1.2.3", Stdout: &out, Stderr: &errOut, Clock: p.clock,
 		Dir: p.dir, Getenv: func(k string) string { return p.env[k] }, GH: p.fake.Run, Probe: allTools,
-		Compose: p.compose, EventsPoll: poll, EventsTest: 5 * time.Second,
+		Compose: p.compose, EventsPoll: poll, EventsTest: 5 * time.Second, LockPoll: time.Second,
 	}
 	code = Run(args, env)
 	return code, out.String(), errOut.String()
