@@ -45,7 +45,12 @@ Skeleton Crew pins `crew` version `v0.1.1`.
      GOTOOLCHAIN=go1.27.2 CGO_ENABLED=0 go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.1.1' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.1.1
      ```
 
-3. If the project has no `.crew/crew.toml`, ask the user which profile it uses (`python`, `node-ts`, `java-spring`, or a description of their own stack), then run `crew init --install <method>` with their answers and the method used in step 2. For their own stack, first write a custom profile at `.crew/profiles/<name>/`, as "Custom profiles" in the README of tag `v0.1.1` of <https://github.com/reubenbubu/skeleton-crew> describes, and pass `--profile <name>`. Otherwise go to [Every session](#every-session).
+3. If the project has no `.crew/crew.toml`:
+   1. Ask the user which profile it uses: `python`, `node-ts`, `java-spring`, or their own stack. Use a built-in profile only when the user names it or accepts one you proposed. If they describe a project instead, propose a profile and wait for their answer. If no built-in profile fits, write a custom profile first at `.crew/profiles/<name>/`, as "Custom profiles" in the README of tag `v0.1.1` of <https://github.com/reubenbubu/skeleton-crew> describes, and show it to the user.
+   2. `crew` has no `--help`, and `crew init` takes flags only. Its usage is in "What `crew init` does" in the same README: `crew init --profile <name> [--install release|source|go] [--harness <name>] [--repo <owner>/<name>] [--public] [--json]`.
+   3. Before you run `crew init`, tell the user what it will do: create the GitHub repository (private unless `--public`) when there is no `origin`, naming the owner and repository; create the labels there; and push the setup commit to `main`. Run it only after the user confirms. Do the same before any other command that changes their GitHub account.
+
+   Then go to [Every session](#every-session).
 
 When the user asks to upgrade Skeleton Crew, run `crew upgrade`, then start again at step 1.
 
