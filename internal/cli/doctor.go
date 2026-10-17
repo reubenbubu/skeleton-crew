@@ -119,13 +119,23 @@ func doctorGate(env Env, root string, repo *git.Repo, prof profile.Profile, sha 
 	if err := repo.AddDetached(dir, sha); err != nil {
 		return doctor.Failure("gate", err.Error())
 	}
-	defer repo.RemoveWorktree(dir)
 	var res gateResult
-	if err := containerSteps(env, root, dir, compose.DoctorProject(root), "doctor", prof, &res); err != nil {
-		return doctor.Failure("gate", err.Error())
+	err := containerSteps(env, root, dir, compose.DoctorProject(root), "doctor", prof, &res)
+	// A failed teardown keeps the worktree; the next crew doctor replaces
+	// it and starts by taking the project down.
+	teardown := ""
+	if res.teardown != "" {
+		teardown = "teardown failed: " + res.teardown + "; .crew/worktrees/gate/doctor kept for the next crew doctor; "
+	} else {
+		repo.RemoveWorktree(dir)
 	}
-	if res.failed != "" {
-		return doctor.Failure("gate", res.failed+"; full output: "+res.log)
+	switch {
+	case err != nil:
+		return doctor.Failure("gate", err.Error())
+	case res.failed != "":
+		return doctor.Failure("gate", res.failed+"; "+teardown+"full output: "+res.log)
+	case teardown != "":
+		return doctor.Warning("gate", sha[:7]+"; "+teardown+"full output: "+res.log)
 	}
 	return doctor.Passed("gate", sha[:7])
 }

@@ -37,8 +37,8 @@ func TestScaffoldPassesGate(t *testing.T) {
 				Dir: dir, Project: fmt.Sprintf("crew-profiletest-%s-%d", name, os.Getpid()), Commands: p.Commands, Log: &log,
 			}
 			for k := 1; k <= 2; k++ {
-				if f, err := r.Steps(); err != nil || f != nil {
-					t.Fatalf("run %d: %+v %v\n%s", k, f, err, log.String())
+				if f, down, err := r.Steps(); err != nil || f != nil || down != nil {
+					t.Fatalf("run %d: %+v %+v %v\n%s", k, f, down, err, log.String())
 				}
 			}
 			// The fast step for TDD runs on the scaffold's test files.

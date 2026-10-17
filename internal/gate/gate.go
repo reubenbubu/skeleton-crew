@@ -188,14 +188,21 @@ type Failure struct {
 
 // Steps clears the compose project, so the run starts from a fresh
 // database, builds its images and runs the profile's steps, stopping at
-// the first that fails. It always takes the project down again. It returns
-// an error only when the container engine could not be run at all.
-func (r Run) Steps() (*Failure, error) {
-	f, err := r.steps()
-	if _, _, _, e := r.step("down", "down", "--volumes", "--remove-orphans", "--rmi", "local"); err == nil {
+// the first that fails. It always takes the project down again, and
+// returns that teardown as a second Failure when it did not succeed. It
+// returns an error only when the container engine could not be run at all.
+func (r Run) Steps() (failed, teardown *Failure, err error) {
+	failed, err = r.steps()
+	name, out, code, e := r.step("down", "down", "--volumes", "--remove-orphans", "--rmi", "local")
+	if e != nil {
+		teardown = &Failure{Step: name, Reason: name + ": " + e.Error()}
+	} else {
+		teardown, _ = r.check(name, out, code, nil)
+	}
+	if err == nil {
 		err = e
 	}
-	return f, err
+	return failed, teardown, err
 }
 
 func (r Run) steps() (*Failure, error) {

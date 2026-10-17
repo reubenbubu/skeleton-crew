@@ -150,6 +150,75 @@ func TestSubmitFails(t *testing.T) {
 	}
 }
 
+// teardownFails makes the gate's final down fail, and fail tests with
+// failTests.
+func (p *devProject) teardownFails(failTests bool) {
+	p.box.answer = func(_ string, args []string) (string, int) {
+		switch {
+		case slices.Contains(args, "--rmi"):
+			return "resource busy; down failed\n", 1
+		case failTests && slices.Contains(args, `pytest -q "$@"`):
+			return "1 failed\n", 1
+		}
+		return "", 0
+	}
+}
+
+const teardownWarning = "resource busy; down failed\nwarning: gate teardown failed: down: exit 1; " + gateDir + " kept for the leftover removal; full output: " + gateLog + "\n"
+
+// #23-AC1 #23-AC2 #23-AC3: a gate that passed still passes when its
+// teardown fails, which is reported, and keeps its worktree.
+func TestSubmitTeardownFails(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.submittable()
+	p.teardownFails(false)
+	code, out, errOut := p.run("ticket", "submit")
+	if want := "gate passed " + sha[:7] + "\n#1 stage=4:waiting-review\n"; code != 0 || out != want || errOut != teardownWarning {
+		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
+	}
+	if got := p.gateStatus(sha); len(got) != 1 || got[0].State != "success" {
+		t.Fatalf("statuses %+v", got)
+	}
+	if got := p.fake.IssueLabels(1); !slices.Contains(got, "stage:4:waiting-review") {
+		t.Fatalf("labels %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(p.main, gateDir)); err != nil {
+		t.Fatalf("gate worktree removed: %v", err)
+	}
+
+	// Once the ticket is done with, the leftover removal retries the
+	// teardown and removes the worktree.
+	p.ok("ticket", "cancel", "1", "--lead", p.token)
+	p.box.answer, p.box.calls = nil, nil
+	if out := p.leadStatus(); !strings.Contains(out, ".crew/worktrees/gate/1 "+compose.GateProject(p.main, 1)) {
+		t.Fatalf("status %q", out)
+	}
+	if !slices.Contains(p.box.calls, filepath.Join(p.main, gateDir)+" -p "+compose.GateProject(p.main, 1)+" down --volumes --remove-orphans --rmi local") {
+		t.Fatalf("calls %q", p.box.calls)
+	}
+	if _, err := os.Stat(filepath.Join(p.main, gateDir)); !os.IsNotExist(err) {
+		t.Fatalf("gate worktree left behind: %v", err)
+	}
+}
+
+// #23-AC1 #23-AC2: a failing gate reports its teardown failure apart from
+// its own.
+func TestSubmitFailsAndTeardownFails(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.submittable()
+	p.teardownFails(true)
+	errOut := p.failed(1, "gate failed: test: exit 1; full output: "+gateLog, "ticket", "submit")
+	if !strings.HasPrefix(errOut, teardownWarning) {
+		t.Fatalf("stderr %q", errOut)
+	}
+	if got := p.gateStatus(sha); len(got) != 1 || got[0].State != "failure" || got[0].Description != "gate failed: test: exit 1" {
+		t.Fatalf("statuses %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(p.main, gateDir)); err != nil {
+		t.Fatalf("gate worktree removed: %v", err)
+	}
+}
+
 func (p *devProject) readMain(name string) string {
 	p.t.Helper()
 	b, err := os.ReadFile(filepath.Join(p.main, name))

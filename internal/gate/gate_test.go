@@ -171,8 +171,8 @@ var all = map[string]string{"build": "b", "lint": "l", "test": "t", "test-change
 func TestStepsRunInOrder(t *testing.T) {
 	b := &box{}
 	var log bytes.Buffer
-	f, err := newRun(b, all, &log).Steps()
-	if err != nil || f != nil {
+	f, down, err := newRun(b, all, &log).Steps()
+	if err != nil || f != nil || down != nil {
 		t.Fatalf("got %+v %v", f, err)
 	}
 	want := []string{
@@ -197,7 +197,7 @@ func TestStepsRunInOrder(t *testing.T) {
 // #8-AC1: steps the profile leaves out are skipped.
 func TestStepsLeftOut(t *testing.T) {
 	b := &box{}
-	f, err := newRun(b, map[string]string{"test": "t", "test-changed": "tc"}, &bytes.Buffer{}).Steps()
+	f, _, err := newRun(b, map[string]string{"test": "t", "test-changed": "tc"}, &bytes.Buffer{}).Steps()
 	if err != nil || f != nil {
 		t.Fatalf("got %+v %v", f, err)
 	}
@@ -225,7 +225,7 @@ func TestStepFails(t *testing.T) {
 			}
 			return "", 0
 		}}
-		f, err := newRun(b, all, &bytes.Buffer{}).Steps()
+		f, _, err := newRun(b, all, &bytes.Buffer{}).Steps()
 		if err != nil || f == nil {
 			t.Fatalf("got %+v %v", f, err)
 		}
@@ -251,7 +251,7 @@ func TestHealth(t *testing.T) {
 		return "", 0
 	}}
 	r := newRun(b, all, &bytes.Buffer{})
-	f, err := r.Steps()
+	f, _, err := r.Steps()
 	if err != nil || f != nil || polls != 3 {
 		t.Fatalf("got %+v %v after %d polls", f, err, polls)
 	}
@@ -267,7 +267,7 @@ func TestHealth(t *testing.T) {
 		}
 		return "", 0
 	}}
-	f, err = newRun(b, all, &bytes.Buffer{}).Steps()
+	f, _, err = newRun(b, all, &bytes.Buffer{}).Steps()
 	if err != nil || f == nil || f.Step != "health" || f.Reason != "health: not healthy within 10s" || string(f.Output) != "connection refused\n" {
 		t.Fatalf("got %+v %v", f, err)
 	}
@@ -287,11 +287,34 @@ func TestFreshFails(t *testing.T) {
 		}
 		return "", 0
 	}}
-	f, err := newRun(b, all, &bytes.Buffer{}).Steps()
+	f, _, err := newRun(b, all, &bytes.Buffer{}).Steps()
 	if err != nil || f == nil || f.Step != "fresh" || f.Reason != "fresh: exit 1" {
 		t.Fatalf("got %+v %v", f, err)
 	}
 	if len(b.calls) != 2 {
 		t.Fatalf("calls %q", b.calls)
+	}
+}
+
+// #23-AC1 #23-AC3: a final down that fails is reported apart from the
+// gate's own result, whether the gate passed or failed.
+func TestTeardownFails(t *testing.T) {
+	for _, lint := range []int{0, 1} {
+		b := &box{answer: func(args []string) (string, int) {
+			switch {
+			case slices.Contains(args, "--rmi"):
+				return "resource busy; down failed\n", 1
+			case slices.Contains(args, "l \"$@\""):
+				return "", lint
+			}
+			return "", 0
+		}}
+		f, down, err := newRun(b, all, &bytes.Buffer{}).Steps()
+		if err != nil || (f != nil) != (lint != 0) {
+			t.Fatalf("lint %d: got %+v %v", lint, f, err)
+		}
+		if down == nil || down.Step != "down" || down.Reason != "down: exit 1" || string(down.Output) != "resource busy; down failed\n" {
+			t.Fatalf("lint %d: teardown %+v", lint, down)
+		}
 	}
 }

@@ -54,13 +54,13 @@ func TestFreshDatabase(t *testing.T) {
 	// finds the marker only because the volume outlives it within a run.
 	r, log := realRun(t, commands)
 	for k := 1; k <= 2; k++ {
-		f, err := r.Steps()
-		if err != nil || f != nil {
-			t.Fatalf("run %d: %+v %v\n%s", k, f, err, log)
+		f, down, err := r.Steps()
+		if err != nil || f != nil || down != nil {
+			t.Fatalf("run %d: %+v %+v %v\n%s", k, f, down, err, log)
 		}
 	}
 	commands["test"] = "echo broken; exit 3"
-	f, err := r.Steps()
+	f, _, err := r.Steps()
 	if err != nil || f == nil || f.Reason != "test: exit 3" || !strings.HasPrefix(string(f.Output), "broken\n") {
 		t.Fatalf("got %+v %v\n%s", f, err, log)
 	}

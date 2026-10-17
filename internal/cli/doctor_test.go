@@ -97,6 +97,39 @@ func TestDoctorGateFails(t *testing.T) {
 	}
 }
 
+// #23-AC5: a failed teardown in crew doctor's gate is reported apart from
+// the gate's result, and keeps the worktree for the next crew doctor.
+func TestDoctorTeardownFails(t *testing.T) {
+	for _, failTests := range []bool{false, true} {
+		box := &containers{answer: func(dir string, args []string) (string, int) {
+			switch {
+			case slices.Contains(args, "--rmi"):
+				return "resource busy; down failed\n", 1
+			case failTests && slices.Contains(args, "pytest -q \"$@\""):
+				return "1 failed\n", 1
+			}
+			return "", 0
+		}}
+		p := doctorProject(t, box)
+		code, out, _ := p.run("doctor")
+		logs, _ := os.ReadDir(filepath.Join(p.dir, ".crew", "logs"))
+		if len(logs) == 0 {
+			t.Fatal("no log")
+		}
+		teardown := "teardown failed: down: exit 1; .crew/worktrees/gate/doctor kept for the next crew doctor; full output: .crew/logs/" + logs[len(logs)-1].Name() + "\n"
+		want, wantCode := "warn gate: "+p.git("rev-parse", "HEAD")[:7]+"; "+teardown, 0
+		if failTests {
+			want, wantCode = "fail gate: test: exit 1; "+teardown, 1
+		}
+		if code != wantCode || !strings.HasSuffix(out, want) {
+			t.Fatalf("got code=%d stdout=%q; want suffix %q", code, out, want)
+		}
+		if !p.exists(".crew/worktrees/gate/doctor") {
+			t.Error("removed the worktree")
+		}
+	}
+}
+
 // #16-AC1 #16-AC2 #16-AC3 #16-AC4 #16-AC5: every problem is reported, a
 // warning alone does not fail, and a failure does.
 func TestDoctorReportsProblems(t *testing.T) {

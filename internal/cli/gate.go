@@ -112,6 +112,10 @@ func gateCommit(env Env, root string, repo *git.Repo, c *github.Client, number i
 		return nil, err
 	}
 	res, err := runGate(env, root, repo, c, number, body, prof, base, sha)
+	if res.teardown != "" {
+		lines(env.Stderr, res.teardownOutput+"warning: gate teardown failed: "+res.teardown+"; "+
+			filepath.ToSlash(filepath.Join(".crew", "worktrees", "gate", strconv.Itoa(number)))+" kept for the leftover removal; full output: "+res.log)
+	}
 	if err != nil {
 		setGate(c, sha, "error", "gate could not run")
 		return nil, err
@@ -155,6 +159,9 @@ type gateResult struct {
 	problems []string // from the checks that need no containers
 	output   string   // the end of the failing step's output
 	log      string   // the full output, relative to the main checkout
+	// teardown is "" when the final down succeeded or never ran, and
+	// otherwise why it failed; teardownOutput is the end of its output.
+	teardown, teardownOutput string
 }
 
 // runGate runs the gate on commit sha of ticket number, whose branch left
@@ -166,7 +173,13 @@ func runGate(env Env, root string, repo *git.Repo, c *github.Client, number int,
 	if err := main.AddDetached(dir, sha); err != nil {
 		return res, err
 	}
-	defer main.RemoveWorktree(dir)
+	// A failed teardown keeps the worktree, which finds the project for
+	// the leftover removal.
+	defer func() {
+		if res.teardown == "" {
+			main.RemoveWorktree(dir)
+		}
+	}()
 
 	// The checks that need no containers come first, so they fail fast.
 	files, err := repo.Files(sha)
@@ -237,13 +250,16 @@ func containerSteps(env Env, root, dir, project, name string, prof profile.Profi
 	if err != nil {
 		return err
 	}
-	f, err := gate.Run{
+	f, down, err := gate.Run{
 		Compose: env.Compose, Clock: env.Clock, Poll: env.HealthPoll, Timeout: env.HealthTimeout,
 		Dir: dir, Project: project, Commands: prof.Commands, Log: log,
 	}.Steps()
 	// Log housekeeping never decides the gate's result.
 	log.Close()
 	prune(logs)
+	if down != nil {
+		res.teardown, res.teardownOutput = down.Reason, tail(down.Output, 20)
+	}
 	if err != nil {
 		return err
 	}
