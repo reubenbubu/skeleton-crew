@@ -12,7 +12,7 @@ These rules are built into `crew`. You cannot change them. If project knowledge 
 
 ## Hard rules
 
-- Work through `crew`. You never call the GitHub API or `gh` directly. You may read with `git`, such as `git status`, `git diff` and `git log`, but `crew` makes every commit, push and branch. Only the DM may use `git` and `gh` directly to change anything: to handle an exception, to resolve a trivial merge conflict, or to open a knowledge-only PR. No one commits to local `main`.
+- Work through `crew`. You never call the GitHub API or `gh` directly. You may read with `git`, such as `git status`, `git diff` and `git log`, but `crew` makes every commit, push and branch. Only the DM may use `git` and `gh` directly to change anything: to handle an exception or to open a knowledge-only PR. No one commits to local `main`.
 - When `crew` meets something outside the normal path, it changes nothing, stops and reports what it found in one line. Do not work around it. The DM handles the case.
 - Never ask for, handle, print or store a credential such as a token or password. When one is needed, show the user the command `crew doctor` prints, for them to run in their own terminal.
 - Write every time as an absolute UTC timestamp, such as `2026-10-16T09:12Z`. Never write a relative time.
