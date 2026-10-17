@@ -82,10 +82,11 @@ func Retry(c *github.Client, number, maxTier, topAttempts int) (int, error) {
 }
 
 // attempts reads the attempts of a ticket from its events: the tier of each
-// time it reached 4:in-progress, and the index of the first attempt since
-// blocked was last cleared.
+// time it reached 4:in-progress, except from 6:pending-merge, which is a
+// repair, and the index of the first attempt since blocked was last
+// cleared.
 func attempts(events []github.Event) (tiers []string, since int) {
-	var tier string
+	var tier, stage string
 	for _, e := range events {
 		if e.Label == nil {
 			continue
@@ -94,7 +95,12 @@ func attempts(events []github.Event) (tiers []string, since int) {
 		case e.Event == "labeled" && strings.HasPrefix(e.Label.Name, "tier:"):
 			tier = strings.TrimPrefix(e.Label.Name, "tier:")
 		case e.Event == "labeled" && e.Label.Name == "stage:4:in-progress":
-			tiers = append(tiers, tier)
+			if stage != "stage:6:pending-merge" {
+				tiers = append(tiers, tier)
+			}
+			stage = e.Label.Name
+		case e.Event == "labeled" && strings.HasPrefix(e.Label.Name, "stage:"):
+			stage = e.Label.Name
 		case e.Event == "unlabeled" && e.Label.Name == labels.Blocked:
 			since = len(tiers)
 		}

@@ -48,6 +48,14 @@ The application always runs in containers, never directly on the host. Do not in
 - `crew env up` starts the ticket's compose project in the background, `crew env down` stops it and removes its volumes, and `crew env logs` prints its logs. Ports are assigned automatically.
 - Follow the profile's database migration rules. Applied migrations are never edited; fixes go forward.
 
+## Repairs
+
+If the ticket's newest `log` comment starts with `repair:`, the ticket met a conflict or a failed gate at merge time. Your worktree holds the branch's whole change, uncommitted, on top of the new `main`, and the conflicting files hold conflict markers.
+
+- Resolve each conflict so that both the ticket's change and the change already on `main` keep working. Never drop the change on `main` to make yours fit.
+- Run the tests, then commit with `crew commit --green "<message>"`, or a plain `crew commit` when the change has no behaviour. `crew commit` refuses a commit that still holds conflict markers. Your earlier red records still count.
+- Then submit as usual.
+
 ## Submitting
 
 - When every acceptance criterion is met, commit everything, then run `crew ticket submit`. It refuses a ticket that is not at `4:in-progress`, a worktree with uncommitted changes, a branch with no commits, and a last commit that is not pushed. It runs the gate on the pushed commit: the TDD and skipped-test checks, then build, lint, the full test suite, the running stack's health and e2e. On success the ticket moves to `4:waiting-review` and your work is done.

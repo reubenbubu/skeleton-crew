@@ -476,3 +476,56 @@ func TestMergeRefusals(t *testing.T) {
 	p.refused(1, "#1 has no single kind: kind=feat,fix", "merge", "1", "--lead", p.token)
 	p.stage("5:review-approved")
 }
+
+// A conflict at stage 6 is repaired on the same ticket: the Dev resolves
+// it on top of the new main, and a fresh gate and review follow.
+func TestRepairAfterAConflict(t *testing.T) {
+	p := newDevProject(t)
+	sha := p.approved()
+	other := p.pushMain("src/app/login.py", "def login(): return False\n")
+	p.failed(1, "merge-conflict: #1 stays at 6:pending-merge: src/app/login.py", "merge", "1", "--lead", p.token)
+
+	want := "#1 stage=4:in-progress tier=2 branch=" + branch + " worktree=" + worktree + "\nconflict: src/app/login.py\n"
+	if out := p.ok("ticket", "repair", "1", "conflict with main in src/app/login.py", "--lead", p.token); out != want {
+		t.Fatalf("got %q; want %q", out, want)
+	}
+	p.stage("4:in-progress")
+	// origin keeps the branch until the Dev's first commit replaces it.
+	if got := gitIn(t, p.origin, "rev-parse", branch); got != sha {
+		t.Fatalf("branch at %s; want %s", got, sha)
+	}
+	if cs := p.comments(1); !strings.Contains(cs[len(cs)-1], "repair: conflict with main in src/app/login.py\nbranch was at "+sha) {
+		t.Fatalf("comment %q", cs[len(cs)-1])
+	}
+	p.dir = filepath.Join(p.main, worktree)
+	if got := p.read("src/app/login.py"); !strings.Contains(got, "<<<<<<< ") {
+		t.Fatalf("no conflict markers: %q", got)
+	}
+	p.failed(1, "conflict markers in src/app/login.py; resolve them first", "commit", "--green", "resolve the conflict with main")
+
+	p.write("src/app/login.py", "def login(): return True\n")
+	p.ok("commit", "--green", "resolve the conflict with main")
+	repaired := p.pushed()
+	if got := gitIn(t, p.origin, "rev-parse", branch); got != repaired {
+		t.Fatalf("branch at %s; want %s", got, repaired)
+	}
+	if got := gitIn(t, p.origin, "rev-parse", repaired+"~1"); got != other {
+		t.Fatalf("repaired onto %s; want %s", got, other)
+	}
+	// The approval named the old commit, so a fresh review is needed.
+	p.ok("ticket", "submit")
+	p.stage("4:waiting-review")
+	p.dir = p.main
+	p.ok("review", "1", "--approve")
+	if out := p.merge(); !strings.HasPrefix(out, "merged "+repaired[:7]+" into main\n") {
+		t.Fatalf("got %q", out)
+	}
+	p.merged(repaired)
+}
+
+func TestRepairRefusals(t *testing.T) {
+	p := newDevProject(t)
+	p.approved()
+	p.refused(1, "stage-changed: #1 is at 5:review-approved, not 6:pending-merge", "ticket", "repair", "1", "x", "--lead", p.token)
+	p.refused(2, "missing argument: <reason>", "ticket", "repair", "1", "--lead", p.token)
+}

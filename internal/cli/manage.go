@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 
+	"github.com/reubenbubu/skeleton-crew/internal/git"
 	"github.com/reubenbubu/skeleton-crew/internal/output"
 	"github.com/reubenbubu/skeleton-crew/internal/ticket"
 )
@@ -349,4 +351,78 @@ func runTicketFix(args []string, env Env) int {
 		err = lines(env.Stdout, fmt.Sprintf("#%d %s", fix.Number, fix.Fields), fmt.Sprintf("#%d stage=9:done", n))
 	}
 	return finish(env, err, false)
+}
+
+func runTicketRepair(args []string, env Env) int {
+	fs := flag.NewFlagSet("ticket repair", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "")
+	n, rest, err := leadTicketArgs(fs, args, env, "<reason>")
+	if err != nil {
+		return finish(env, err, false)
+	}
+	r, err := root(env)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	c, err := client(env)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	i, f, err := ticket.Repairable(c, n)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	branch := ticket.Branch(f.Kind, n, i.Title)
+	repo := &git.Repo{Dir: r}
+	base, err := repo.Branch("main")
+	if err != nil {
+		return finish(env, err, false)
+	}
+	old, err := repo.Branch(branch)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	if in, err := repo.IsAncestor(old, base); err != nil || in {
+		if err == nil {
+			err = fmt.Errorf("#%d is already in main at %s; run crew merge %d", n, old[:7], n)
+		}
+		return finish(env, err, false)
+	}
+	// The worktree is rebuilt, and origin keeps the branch until the Dev's
+	// first commit replaces it, so a repair that stops runs again.
+	wt := path.Join(".crew", "worktrees", branch)
+	dir := filepath.Join(r, filepath.FromSlash(wt))
+	if err := repo.AddWorktree(dir, branch); err != nil {
+		return finish(env, err, false)
+	}
+	w := &git.Repo{Dir: dir}
+	if err := w.ResetHard(base); err != nil {
+		return finish(env, err, false)
+	}
+	conflicts, err := w.Squash(old)
+	if err != nil {
+		return finish(env, err, false)
+	}
+	if err := ticket.Repair(c, n, f, rest[0], old); err != nil {
+		return finish(env, err, false)
+	}
+	if conflicts == nil {
+		conflicts = []string{}
+	}
+	if *asJSON {
+		err = output.JSON(env.Stdout, struct {
+			Number    int      `json:"number"`
+			Stage     string   `json:"stage"`
+			Tier      string   `json:"tier"`
+			Branch    string   `json:"branch"`
+			Worktree  string   `json:"worktree"`
+			Conflicts []string `json:"conflicts"`
+		}{n, "4:in-progress", f.Tier, branch, wt, conflicts})
+		return finish(env, err, false)
+	}
+	ls := []string{fmt.Sprintf("#%d stage=4:in-progress tier=%s branch=%s worktree=%s", n, f.Tier, branch, wt)}
+	for _, p := range conflicts {
+		ls = append(ls, "conflict: "+p)
+	}
+	return finish(env, lines(env.Stdout, ls...), false)
 }

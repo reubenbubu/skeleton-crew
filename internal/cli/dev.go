@@ -15,6 +15,7 @@ import (
 	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/config"
 	"github.com/reubenbubu/skeleton-crew/internal/git"
+	"github.com/reubenbubu/skeleton-crew/internal/github"
 	"github.com/reubenbubu/skeleton-crew/internal/output"
 	"github.com/reubenbubu/skeleton-crew/internal/profile"
 	"github.com/reubenbubu/skeleton-crew/internal/ticket"
@@ -249,7 +250,7 @@ func runCommit(args []string, env Env) int {
 		repo.Unstage()
 		return finish(env, err, false)
 	}
-	if err := repo.PushBranch(h.branch); err != nil {
+	if err := push(c, repo, h, sha); err != nil {
 		return finish(env, err, false)
 	}
 	pr, opened, err := ticket.OpenPR(c, h.number, h.kind, h.branch)
@@ -272,6 +273,48 @@ func runCommit(args []string, env Env) int {
 		err = lines(env.Stdout, ls...)
 	}
 	return finish(env, err, false)
+}
+
+// push pushes commit sha to the ticket's branch. The first commit after a
+// repair replaces the branch: it pushes with a lease on the commit the
+// branch was at when the repair started, and only while it is still there.
+func push(c *github.Client, repo *git.Repo, h here, sha string) error {
+	lease, err := ticket.RepairLease(c, h.number)
+	if err != nil {
+		return err
+	}
+	if lease == "" {
+		return repo.PushBranch(h.branch)
+	}
+	remote, err := repo.Branch(h.branch)
+	if err != nil {
+		return err
+	}
+	if remote == lease {
+		after, err := repo.IsAncestor(lease, sha)
+		if err != nil {
+			return err
+		}
+		if !after {
+			return repo.Push(sha, h.branch, lease)
+		}
+	}
+	return repo.PushBranch(h.branch)
+}
+
+// conflictMarkers returns the files of diff, a staged diff, whose added
+// lines start or end a conflict.
+func conflictMarkers(diff string) []string {
+	var files []string
+	file := ""
+	for line := range strings.SplitSeq(diff, "\n") {
+		if f, ok := strings.CutPrefix(line, "+++ b/"); ok {
+			file = f
+		} else if (strings.HasPrefix(line, "+<<<<<<< ") || strings.HasPrefix(line, "+>>>>>>> ")) && !slices.Contains(files, file) {
+			files = append(files, file)
+		}
+	}
+	return files
 }
 
 // redResult is what a red step records on the ticket.
@@ -302,6 +345,13 @@ func checkStaged(env Env, repo *git.Repo, h here, prof profile.Profile, phase st
 	}
 	if len(staged) == 0 {
 		return nil, errors.New("nothing to commit")
+	}
+	diff, err := repo.StagedDiff()
+	if err != nil {
+		return nil, err
+	}
+	if files := conflictMarkers(diff); len(files) > 0 {
+		return nil, errors.New("conflict markers in " + strings.Join(files, " ") + "; resolve them first")
 	}
 	var tests, others []string
 	for _, ch := range staged {

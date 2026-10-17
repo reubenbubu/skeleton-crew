@@ -174,7 +174,7 @@ func Ready(c *github.Client, number int) error {
 // accepts the issue, and only if the ticket is still at from. Each caller
 // allows only a forward move.
 func move(c *github.Client, number int, from, to string, check func(github.Issue) error) (github.Issue, error) {
-	if to != Cancelled && stageRank(to) < stageRank(from) {
+	if to != Cancelled && !(from == "6:pending-merge" && to == "4:in-progress") && stageRank(to) < stageRank(from) {
 		panic("backward stage move: " + from + " to " + to)
 	}
 	i, f, err := get(c, number)

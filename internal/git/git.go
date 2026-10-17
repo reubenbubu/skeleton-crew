@@ -513,6 +513,31 @@ func (r *Repo) IsAncestor(a, b string) (bool, error) {
 	return err == nil, err
 }
 
+// ResetHard moves HEAD, and the branch checked out, to commit sha, and
+// drops every change in the working tree.
+func (r *Repo) ResetHard(sha string) error {
+	if _, err := git(r.Dir, "reset", "--quiet", "--hard", sha); err != nil {
+		return err
+	}
+	_, err := git(r.Dir, "clean", "--quiet", "-ffd")
+	return err
+}
+
+// Squash applies the changes of commit sha since it left HEAD's history to
+// the working tree as one uncommitted change. It returns the paths that
+// conflict, which hold conflict markers.
+func (r *Repo) Squash(sha string) (conflicts []string, err error) {
+	_, err = git(r.Dir, "merge", "--squash", "--quiet", sha)
+	if err == nil {
+		return nil, nil
+	}
+	out, uerr := git(r.Dir, "diff", "--name-only", "--diff-filter=U", "-z")
+	if uerr != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(strings.TrimSuffix(out, "\x00"), "\x00"), nil
+}
+
 // Rebase rebases HEAD onto commit onto. On a conflict it aborts the rebase,
 // which leaves HEAD as it was, and returns the conflicting paths.
 func (r *Repo) Rebase(onto string) (conflicts []string, err error) {
