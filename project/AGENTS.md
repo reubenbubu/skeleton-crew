@@ -4,10 +4,10 @@ This project is run by Skeleton Crew: a Project Manager, a Dev Manager, Devs and
 
 ## Bootstrap
 
-Skeleton Crew pins `crew` version `v0.2.0`.
+Skeleton Crew pins `crew` version `v0.3.0`.
 
-1. Run `crew --version`. If it prints `v0.2.0`, go to step 3.
-2. Otherwise, install `crew` `v0.2.0` with one of the methods below. If `.crew/crew.toml` has an `install` line, use the method it names. If not, ask the user which method to use; `release` is the default. Show the user the exact commands before running them, and stop if any of them fails. If `~/.local/bin` is not on the user's `PATH`, tell them.
+1. Run `crew --version`. If it prints `v0.3.0`, go to step 3.
+2. Otherwise, install `crew` `v0.3.0` with one of the methods below. If `.crew/crew.toml` has an `install` line, use the method it names. If not, ask the user which method to use; `release` is the default. Show the user the exact commands before running them, and stop if any of them fails. If `~/.local/bin` is not on the user's `PATH`, tell them.
 
    On Linux and macOS, run the `sh` commands. On Windows, run the PowerShell commands in a PowerShell process of their own, whatever shell you use: save them to a temporary `.ps1` file and run `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`.
 
@@ -18,10 +18,10 @@ Skeleton Crew pins `crew` version `v0.2.0`.
        os=$(uname -s | tr '[:upper:]' '[:lower:]') && arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') &&
        if command -v sha256sum >/dev/null; then sum=sha256sum; else sum='shasum -a 256'; fi &&
        cd "$(mktemp -d)" &&
-       gh release download v0.2.0 --repo reubenbubu/skeleton-crew --pattern "crew-$os-$arch" --pattern SHA256SUMS &&
+       gh release download v0.3.0 --repo reubenbubu/skeleton-crew --pattern "crew-$os-$arch" --pattern SHA256SUMS &&
        line=$(grep " crew-$os-$arch\$" SHA256SUMS) && printf '%s\n' "$line" | $sum -c &&
        gh attestation verify "crew-$os-$arch" --repo reubenbubu/skeleton-crew \
-         --signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml --source-ref refs/tags/v0.2.0 &&
+         --signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml --source-ref refs/tags/v0.3.0 &&
        mkdir -p ~/.local/bin && install -m 0755 "crew-$os-$arch" ~/.local/bin/crew
      )
      ```
@@ -31,12 +31,12 @@ Skeleton Crew pins `crew` version `v0.2.0`.
      $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
      $bin = 'crew-windows-' + @{ AMD64 = 'amd64'; ARM64 = 'arm64' }[$a] + '.exe'
      $d = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
-     gh release download v0.2.0 --repo reubenbubu/skeleton-crew --pattern $bin --pattern SHA256SUMS --dir $d
+     gh release download v0.3.0 --repo reubenbubu/skeleton-crew --pattern $bin --pattern SHA256SUMS --dir $d
      if ($LASTEXITCODE) { throw 'gh release download failed' }
      $want = foreach ($l in Get-Content "$d\SHA256SUMS") { $h, $n = $l -split '  ', 2; if ($n -eq $bin) { $h } }
      if ((Get-FileHash "$d\$bin" -Algorithm SHA256).Hash -ne $want) { throw "checksum mismatch: $bin" }
      gh attestation verify "$d\$bin" --repo reubenbubu/skeleton-crew `
-       --signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml --source-ref refs/tags/v0.2.0
+       --signer-workflow reubenbubu/skeleton-crew/.github/workflows/release.yml --source-ref refs/tags/v0.3.0
      if ($LASTEXITCODE) { throw 'gh attestation verify failed' }
      New-Item -ItemType Directory -Force -Path "$HOME\.local\bin" | Out-Null
      Copy-Item "$d\$bin" "$HOME\.local\bin\crew.exe" -Force
@@ -49,9 +49,9 @@ Skeleton Crew pins `crew` version `v0.2.0`.
        os=$(uname -s | tr '[:upper:]' '[:lower:]') && arch=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') &&
        if command -v sha256sum >/dev/null; then sum=sha256sum; else sum='shasum -a 256'; fi &&
        d=$(mktemp -d) &&
-       git clone --quiet --depth 1 --branch v0.2.0 https://github.com/reubenbubu/skeleton-crew "$d/src" &&
-       "$d/src/scripts/self-build.sh" v0.2.0 &&
-       gh release download v0.2.0 --repo reubenbubu/skeleton-crew --pattern SHA256SUMS --dir "$d" &&
+       git clone --quiet --depth 1 --branch v0.3.0 https://github.com/reubenbubu/skeleton-crew "$d/src" &&
+       "$d/src/scripts/self-build.sh" v0.3.0 &&
+       gh release download v0.3.0 --repo reubenbubu/skeleton-crew --pattern SHA256SUMS --dir "$d" &&
        cd "$d/src/dist" &&
        line=$(grep " crew-$os-$arch\$" "$d/SHA256SUMS") && printf '%s\n' "$line" | $sum -c &&
        mkdir -p ~/.local/bin && install -m 0755 "crew-$os-$arch" ~/.local/bin/crew
@@ -63,11 +63,11 @@ Skeleton Crew pins `crew` version `v0.2.0`.
      $a = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
      $bin = 'crew-windows-' + @{ AMD64 = 'amd64'; ARM64 = 'arm64' }[$a] + '.exe'
      $d = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
-     git clone --quiet --depth 1 --branch v0.2.0 https://github.com/reubenbubu/skeleton-crew "$d\src"
+     git clone --quiet --depth 1 --branch v0.3.0 https://github.com/reubenbubu/skeleton-crew "$d\src"
      if ($LASTEXITCODE) { throw 'git clone failed' }
-     powershell -NoProfile -ExecutionPolicy Bypass -File "$d\src\scripts\self-build.ps1" v0.2.0
+     powershell -NoProfile -ExecutionPolicy Bypass -File "$d\src\scripts\self-build.ps1" v0.3.0
      if ($LASTEXITCODE) { throw 'self-build failed' }
-     gh release download v0.2.0 --repo reubenbubu/skeleton-crew --pattern SHA256SUMS --dir $d
+     gh release download v0.3.0 --repo reubenbubu/skeleton-crew --pattern SHA256SUMS --dir $d
      if ($LASTEXITCODE) { throw 'gh release download failed' }
      $want = foreach ($l in Get-Content "$d\SHA256SUMS") { $h, $n = $l -split '  ', 2; if ($n -eq $bin) { $h } }
      if ((Get-FileHash "$d\src\dist\$bin" -Algorithm SHA256).Hash -ne $want) { throw "checksum mismatch: $bin" }
@@ -78,16 +78,16 @@ Skeleton Crew pins `crew` version `v0.2.0`.
    - **`go`:** for a user who already has Go. Go checks the module against its checksum database and installs `crew` into its own `bin` directory.
 
      ```sh
-     GOTOOLCHAIN=go1.27.2 CGO_ENABLED=0 go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.2.0' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.2.0
+     GOTOOLCHAIN=go1.27.2 CGO_ENABLED=0 go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.3.0' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.3.0
      ```
 
      ```powershell
      $env:GOTOOLCHAIN = 'go1.27.2'; $env:CGO_ENABLED = '0'
-     go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.2.0' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.2.0
+     go install -trimpath -ldflags '-s -w -buildid= -X main.version=v0.3.0' github.com/reubenbubu/skeleton-crew/cmd/crew@v0.3.0
      ```
 
 3. If the project has no `.crew/crew.toml`:
-   1. Ask the user which profile it uses: `python`, `node-ts`, `java-spring`, or their own stack. Use a built-in profile only when the user names it or accepts one you proposed. If they describe a project instead, propose a profile and wait for their answer. If no built-in profile fits, write a custom profile first at `.crew/profiles/<name>/`, as "Custom profiles" in the README of tag `v0.2.0` of <https://github.com/reubenbubu/skeleton-crew> describes, and show it to the user.
+   1. Ask the user which profile it uses: `python`, `node-ts`, `java-spring`, or their own stack. Use a built-in profile only when the user names it or accepts one you proposed. If they describe a project instead, propose a profile and wait for their answer. If no built-in profile fits, write a custom profile first at `.crew/profiles/<name>/`, as "Custom profiles" in the README of tag `v0.3.0` of <https://github.com/reubenbubu/skeleton-crew> describes, and show it to the user.
    2. `crew` has no `--help`, and `crew init` takes flags only. Its usage is in "What `crew init` does" in the same README: `crew init --profile <name> [--install release|source|go] [--harness <name>] [--repo <owner>/<name>] [--public] [--json]`.
    3. Before you run `crew init`, tell the user what it will do: create the GitHub repository (private unless `--public`) when there is no `origin`, naming the owner and repository; create the labels there; and push the setup commit to `main`. Run it only after the user confirms. Do the same before any other command that changes their GitHub account.
 
