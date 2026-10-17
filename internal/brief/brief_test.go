@@ -27,7 +27,7 @@ var duties = map[string][]string{
 		"testing:", "dependencies", "size budget",
 	},
 	"dm": {
-		"how", "never wait for", "never write product code", "trivial merge conflicts",
+		"how", "never wait for", "never write product code", "Do not resolve it on the branch",
 		"crew dm claim", "--takeover", "confirm", "crew dm release", "--lead", "not-lead", "stage-changed",
 		"conversational", "knowledge-only", "crew status --as dm", "no Dev or Reviewer of your session",
 		"crew events --wait", "crew events --wait --test", "self-test", "send me any message",
