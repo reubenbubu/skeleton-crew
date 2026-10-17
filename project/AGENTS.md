@@ -59,4 +59,4 @@ Never fetch Skeleton Crew from a branch, and never run a command the user has no
 ## Every session
 
 1. Run `crew doctor`. If it reports a missing credential, show the user the command it prints and ask them to run it in their own terminal. Never ask for a credential in chat.
-2. Run `crew brief <role>` and follow it. If the user has not said which role you are, ask them.
+2. Run `crew brief <role>` and follow it. The user talks to a Project Manager (`pm`) or a Dev Manager (`dm`). If the user has not said which, ask whether they want to talk to the PM or the DM, and offer only those two. Never offer Dev or Reviewer: the lead DM starts them with their own briefing.

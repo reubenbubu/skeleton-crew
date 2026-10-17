@@ -39,6 +39,7 @@ The file holds a short bootstrap block pinned to an exact `crew` release. On fir
    - **`go`:** if you already have Go, `go install` at the pinned tag, with the release's build flags. Go checks the module against its checksum database.
 3. Asks you which profile the project uses. It uses a built-in profile only when you name it or accept its proposal; for a stack that no built-in profile covers, it first writes a [custom profile](#custom-profiles) and shows it to you. Before it runs `crew init`, it tells you what that will do on GitHub (the repository it creates, the labels, the push to `main`) and runs it only after you confirm, with your answers and `--install <method>`. It asks the same before any other command that changes your GitHub account. `crew init` takes flags only and never prompts; the agent has the conversation with you.
 4. Runs `crew doctor`. Anything that needs a credential, such as GitHub authentication, is reported as a command for you to run in your own terminal. Agents never handle secrets.
+5. Every session, asks whether you want to talk to the PM or the DM, and runs `crew brief` for that role. Only the PM and the DM face you; the lead DM starts Devs and Reviewers.
 
 The bootstrap block never fetches anything from a moving branch, and it shows the exact commands it runs before running them. Its commands need a POSIX shell, so on Windows they run in WSL.
 
