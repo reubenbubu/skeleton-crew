@@ -285,7 +285,7 @@ Each ticket in flight has its own:
 - git branch and worktree; see [Conventions](#conventions),
 - compose project (`crew-<id>-<ticket>`) with automatically assigned ports. `<id>` is the first 8 hex digits of the SHA-256 of the main checkout's absolute path, so two repositories, or two checkouts of one repository, never share a compose project on the same container engine, even for the same ticket number. Every compose project `crew` names starts with `crew-<id>-`. Moving the checkout changes `<id>`; compose projects left behind under the old one are then not found by the leftover removal in [Session recovery](#session-recovery). A profile's `compose.yaml` publishes container ports only, so the container engine picks free host ports and two tickets never clash. The project is created when the Dev first runs `crew env up` or `crew run`.
 
-Every ticket at a stage 4 holds a slot: `4:in-progress`, `4:waiting-review` and `4:review-rejected`, which keeps its slot for the next attempt. At the cap, `crew ticket start` is refused with one line such as `at-cap: 3 of 3 slots busy: #4 #5 #6`.
+Every ticket at a stage 4 holds a slot: `4:in-progress`, `4:waiting-review` and `4:review-rejected`, which keeps its slot for the next attempt. The cap limits work in progress, not the number of Devs running: at the cap, some slots may hold tickets waiting for a Reviewer or a retry. At the cap, `crew ticket start` is refused with one line such as `at-cap: 3 of 3 slots busy: #4 #5 #6`.
 
 Merges into `main` happen one at a time. Branches are rebased only at merge time, at `6:pending-merge`. Devs never rebase while they work.
 
@@ -466,6 +466,17 @@ You can have several DM sessions open at once, but only one of them, the **lead*
 - Only the lead starts Devs and Reviewers, merges, cancels, runs recovery, reads events and records harness wiring. `crew` refuses these from any other session with one line that starts with `not-lead`, such as `not-lead: the lead was claimed at 2026-10-16T09:12Z by another session` or `not-lead: no lead; run crew dm claim`.
 - Every other DM is **conversational**. It discusses implementation with you, records decisions, creates tickets from your requests and opens knowledge-only PRs. It never starts or merges work.
 - `crew dm release --lead <token>` gives up the lead when the lead session ends normally. Only the lead can release it.
+
+### Work cycle
+
+The lead DM works in a fixed cycle each time its wait for events exits, or, without working wiring, each time you prompt it:
+
+1. Handle the events from `crew events`: answer Dev questions, act on answers and human comments, start Reviewers, retry or appeal rejections, and act on the recovery proposal of a ticket whose handoff went stale.
+2. Merge what is approved, one ticket at a time. Merging before starting new work keeps rebases small.
+3. Start eligible tickets that do not collide with work in flight, until the parallel cap.
+4. Start a new wait.
+
+It runs `crew status` in full only when it starts as lead, for a stale handoff, or when you ask, so its context grows with work done, not with each wake.
 
 ### The lead can never lock the system
 

@@ -21,7 +21,7 @@ The recommended setup is one lead DM session that does the work, and a conversat
 ## Every session
 
 1. Run `crew dm claim`, then `crew status --as dm`, adding `--lead <token>` as lead. It shows unanswered Dev questions, the board, stale handoffs and one recovery proposal per ticket. With `--lead`, it also advances `7:merged` tickets through `8:deploying` to `9:done` from the deployment workflow's status, and removes the worktrees and compose projects of tickets no longer in stages 4 to 6. Run it again whenever you want to see the whole state.
-2. As lead, check the harness wiring, then act on the recovery proposals and the board.
+2. As lead, check the harness wiring, act on the recovery proposals and the board, then follow the [work cycle](#work-cycle).
 
 ## Harness wiring
 
@@ -41,6 +41,17 @@ Without wiring, you act only when the user prompts you. With it, you wake when s
 - Wiring lives where the harness requires it, such as `.claude/` or `.opencode/`.
 - A record can go stale, for example after a harness update. When the user prompts you and `crew events` shows events that should have woken you, run the self-test again and record the result.
 
+## Work cycle
+
+Run this cycle as lead each time your wait exits. Without working wiring, run it each time the user prompts you.
+
+1. Run `crew events --lead <token>` and handle each event: answer a Dev question, act on an answer or a human comment, start a Reviewer for `4:waiting-review`, retry or appeal a rejection. For a stale handoff, run `crew status --as dm --lead <token>` and act on that ticket's proposal.
+2. Merge every approved ticket, one at a time. Merging before starting new work keeps rebases small.
+3. Start eligible tickets that do not collide with work in flight, until the parallel cap.
+4. Start a new wait and end your turn.
+
+Run `crew status` when you start as lead, for a stale handoff, or when the user asks, not on every wake: events already say what changed, and your context should grow only with work done.
+
 ## Selecting work
 
 - `crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done, by priority, then by age. Take the first one.
@@ -51,7 +62,7 @@ Without wiring, you act only when the user prompts you. With it, you wake when s
 ## Starting a Dev
 
 - Choose a tier rank for the ticket's complexity. Ranks and their models are in `.crew/crew.toml`; rank 1 is the lightest. Follow the user's wishes, such as "use cheaper models" or "use rank 3 for #12".
-- Run `crew ticket start <n> --tier <rank> --lead <token>`. It moves the ticket from `3:eligible` to `4:in-progress`, sets `tier:<rank>`, and creates the branch and the worktree. It is refused at the parallel cap with a line such as `at-cap: 3 of 3 slots busy: #4 #5 #6`. Every ticket at a stage 4 holds a slot. A `critical` ticket gets one extra slot.
+- Run `crew ticket start <n> --tier <rank> --lead <token>`. It moves the ticket from `3:eligible` to `4:in-progress`, sets `tier:<rank>`, and creates the branch and the worktree. It is refused at the parallel cap with a line such as `at-cap: 3 of 3 slots busy: #4 #5 #6`. Every ticket at a stage 4 holds a slot, including `4:waiting-review` and `4:review-rejected`. The cap limits work in progress; it is not a number of Devs to keep running, so a full cap with few Devs running is not a fault. A `critical` ticket gets one extra slot.
 - Run `crew brief dev <n>`. Its second line names the tier, model and effort. Start the Dev as a subagent with that model and effort. When it names no model, the subagent uses the session's model. If your harness cannot set the effort, only the model applies; if it cannot set the model either, the subagent uses the session's settings.
 - Tell the Dev the ticket number and its worktree, and that it starts by running `crew brief dev <n>` there.
 
