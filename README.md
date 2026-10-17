@@ -4,7 +4,7 @@ Skeleton Crew is a small team of AI agents that takes software from a requiremen
 
 It runs inside the agent harness you already use. There is no daemon, no service to install and no separate control plane. GitHub Issues hold the tickets, git holds the code, and a single CLI, `crew`, does the deterministic work.
 
-> **Status: design stage.** This README records the agreed design. Nothing is released yet.
+> **Status: early release.** This README records the agreed design. Releases are published on [GitHub](https://github.com/reubenbubu/skeleton-crew/releases).
 
 ## The crew
 
