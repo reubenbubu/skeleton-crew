@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 )
 
 // waiting makes ticket 1 wait for review: its gated commit is pushed and
@@ -172,12 +174,15 @@ func (p *devProject) cleaned() {
 	if got := gitIn(p.t, p.main, "worktree", "list"); strings.Contains(got, ".crew/worktrees") {
 		p.t.Fatalf("worktrees still registered: %s", got)
 	}
-	if last := p.box.calls[len(p.box.calls)-1]; last != wt+" -p crew-1 down --volumes --remove-orphans --rmi local" {
+	if last := p.box.calls[len(p.box.calls)-1]; last != wt+" -p "+compose.Project(p.main, 1)+" down --volumes --remove-orphans --rmi local" {
 		p.t.Fatalf("last compose call %q", last)
 	}
 }
 
-const removed = "removed " + worktree + " crew-1\n"
+// removed is crew merge's last line for ticket 1.
+func (p *devProject) removed() string {
+	return "removed " + worktree + " " + compose.Project(p.main, 1) + "\n"
+}
 
 // #9-AC3 #9-AC4 #9-AC6 #9-AC7
 func TestMerge(t *testing.T) {
@@ -185,7 +190,7 @@ func TestMerge(t *testing.T) {
 	sha := p.approved()
 	statuses := len(p.statusWrites())
 	out := p.merge()
-	if want := "merged " + sha[:7] + " into main\n#1 stage=9:done\n" + removed; out != want {
+	if want := "merged " + sha[:7] + " into main\n#1 stage=9:done\n" + p.removed(); out != want {
 		t.Fatalf("got %q; want %q", out, want)
 	}
 	p.merged(sha)
@@ -220,7 +225,7 @@ func TestMergeAfterMainMoved(t *testing.T) {
 	if rebased == sha {
 		t.Fatal("the branch was not rebased")
 	}
-	if want := "rebased " + branch + " onto main: " + rebased[:7] + "\ngate passed " + rebased[:7] + "\nmerged " + rebased[:7] + " into main\n#1 stage=9:done\n" + removed; out != want {
+	if want := "rebased " + branch + " onto main: " + rebased[:7] + "\ngate passed " + rebased[:7] + "\nmerged " + rebased[:7] + " into main\n#1 stage=9:done\n" + p.removed(); out != want {
 		t.Fatalf("got %q; want %q", out, want)
 	}
 	p.merged(rebased)
@@ -231,7 +236,7 @@ func TestMergeAfterMainMoved(t *testing.T) {
 		t.Fatalf("statuses %+v", got)
 	}
 	gate := filepath.Join(p.main, gateDir)
-	if want := gateCalls(gate, pythonSteps...); !slices.Equal(p.box.calls[:len(want)], want) {
+	if want := gateCalls(p.main, gate, pythonSteps...); !slices.Equal(p.box.calls[:len(want)], want) {
 		t.Fatalf("calls:\n%s\nwant first:\n%s", strings.Join(p.box.calls, "\n"), strings.Join(want, "\n"))
 	}
 	if _, err := os.Stat(filepath.Join(p.main, ".crew/worktrees/merge/1")); err == nil {
@@ -305,7 +310,7 @@ func TestMergeWithDeploymentWorkflow(t *testing.T) {
 	p := newDevProject(t)
 	p.pushMain(".github/workflows/deploy.yml", "on: push\n")
 	sha := p.approved()
-	if out := p.merge(); out != "merged "+sha[:7]+" into main\n#1 stage=7:merged\n"+removed {
+	if out := p.merge(); out != "merged "+sha[:7]+" into main\n#1 stage=7:merged\n"+p.removed() {
 		t.Fatalf("got %q", out)
 	}
 	p.stage("7:merged")

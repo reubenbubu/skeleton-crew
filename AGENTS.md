@@ -29,6 +29,12 @@ These instructions are for agents working on Skeleton Crew itself. The file ship
 | `scripts/` | `go.sh` runs Go in the pinned container image; `test.sh` runs the tests; `test-containers.sh` runs the tests that need a container engine; `self-build.sh` builds `crew` |
 | `docs/sessions/` | Session recaps: state, open questions and next steps for picking work back up |
 
+## Navigating the code
+
+- Use the codebase-memory MCP server for structural questions about the code, both in the main checkout and in every worktree: `search_graph` to find symbols, `trace_path` for callers and callees, `get_code_snippet` for source. Use grep and file reads for literals, configuration and files that are not code.
+- A worktree's code differs from the main checkout's. Before querying in a worktree, index it with `index_repository` on the worktree's own path, and query its project, never the main checkout's.
+- Call `check_index_coverage` for every file a conclusion relies on, and read the lines it reports as missed.
+
 ## Building and testing
 
 - `crew` is written in Go, using the standard library only. The module path is `github.com/reubenbubu/skeleton-crew`.

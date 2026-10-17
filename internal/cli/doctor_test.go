@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/output/outputtest"
 )
 
@@ -54,12 +55,13 @@ func TestDoctorRunsOneGate(t *testing.T) {
 	p := doctorProject(t, box)
 	p.ok("doctor")
 	dir := filepath.Join(p.dir, ".crew", "worktrees", "gate", "doctor")
+	prefix := dir + " -p " + compose.DoctorProject(p.dir) + " "
 	var steps []string
 	for _, c := range box.calls {
-		if !strings.HasPrefix(c, dir+" -p crew-doctor ") {
+		if !strings.HasPrefix(c, prefix) {
 			t.Fatalf("call %q", c)
 		}
-		steps = append(steps, strings.Fields(strings.TrimPrefix(c, dir+" -p crew-doctor "))[0])
+		steps = append(steps, strings.Fields(strings.TrimPrefix(c, prefix))[0])
 	}
 	if want := []string{"down", "build", "run", "run", "run", "down"}; !slices.Equal(steps, want) {
 		t.Errorf("steps %v, want %v", steps, want)

@@ -41,6 +41,7 @@ func loadConfig(root string) (config.Config, profile.Profile, error) {
 // here is the ticket whose worktree crew runs in.
 type here struct {
 	dir    string // the root of the worktree
+	root   string // the root of the main checkout
 	branch string
 	kind   string
 	number int
@@ -63,7 +64,11 @@ func ticketHere(env Env) (here, error) {
 	if !ok {
 		return here{}, errors.New("not on a ticket branch: " + b)
 	}
-	return here{dir: top, branch: b, kind: kind, number: n}, nil
+	r, err := git.MainRoot(top)
+	if err != nil {
+		return here{}, err
+	}
+	return here{dir: top, root: r, branch: b, kind: kind, number: n}, nil
 }
 
 func runTicketStart(args []string, env Env) int {
@@ -140,7 +145,7 @@ func runTicketStart(args []string, env Env) int {
 			Branch   string `json:"branch"`
 			Worktree string `json:"worktree"`
 			Compose  string `json:"compose"`
-		}{n, "4:in-progress", rank, branch, wt, compose.Project(n)})
+		}{n, "4:in-progress", rank, branch, wt, compose.Project(r, n)})
 	} else {
 		err = lines(env.Stdout, fmt.Sprintf("#%d stage=4:in-progress tier=%d branch=%s worktree=%s", n, rank, branch, wt))
 	}
@@ -350,7 +355,7 @@ func checkStaged(env Env, repo *git.Repo, h here, prof profile.Profile, phase st
 			}
 		}
 	}
-	out, code, err := compose.Exec(env.Compose, h.dir, h.number, prof.Commands["test-changed"], run)
+	out, code, err := compose.Exec(env.Compose, h.dir, h.root, h.number, prof.Commands["test-changed"], run)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +390,7 @@ func runEnv(args []string, env Env) int {
 	if err != nil {
 		return finish(env, err, false)
 	}
-	project := compose.Project(h.number)
+	project := compose.Project(h.root, h.number)
 	out, code, err := env.Compose(h.dir, append([]string{"-p", project}, a...)...)
 	switch {
 	case err != nil:
@@ -425,7 +430,7 @@ func runRun(args []string, env Env) int {
 	if !ok {
 		return finish(env, fmt.Errorf("the %s profile has no %s command", prof.Name, args[0]), false)
 	}
-	out, code, err := compose.Exec(env.Compose, h.dir, h.number, cmd, args[1:])
+	out, code, err := compose.Exec(env.Compose, h.dir, h.root, h.number, cmd, args[1:])
 	if err != nil {
 		return finish(env, err, false)
 	}

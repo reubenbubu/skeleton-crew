@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 )
 
 // deployed merges ticket 1, whose PR is #2, with a deployment workflow at
@@ -151,16 +153,17 @@ func TestStatusRemovesLeftovers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	dev7, gate7 := compose.Project(p.main, 7), compose.GateProject(p.main, 7)
 	want := "=== changes\n" +
-		"#7 removed .crew/worktrees/feat/7/old-work crew-7 .crew/worktrees/gate/7 crew-7-gate\n" +
+		"#7 removed .crew/worktrees/feat/7/old-work " + dev7 + " .crew/worktrees/gate/7 " + gate7 + "\n" +
 		"#9 removed .crew/worktrees/merge/9\n"
 	if out := p.leadStatus(); !strings.HasPrefix(out, want) {
 		t.Fatalf("got\n%swant prefix\n%s", out, want)
 	}
 	wt := filepath.Join(p.main, ".crew", "worktrees")
 	calls := []string{
-		filepath.Join(wt, "feat/7/old-work") + " -p crew-7 down --volumes --remove-orphans --rmi local",
-		filepath.Join(wt, "gate/7") + " -p crew-7-gate down --volumes --remove-orphans --rmi local",
+		filepath.Join(wt, "feat/7/old-work") + " -p " + dev7 + " down --volumes --remove-orphans --rmi local",
+		filepath.Join(wt, "gate/7") + " -p " + gate7 + " down --volumes --remove-orphans --rmi local",
 	}
 	if !slices.Equal(p.box.calls, calls) {
 		t.Fatalf("compose calls %q", p.box.calls)
@@ -181,7 +184,7 @@ func TestStatusRemovesLeftovers(t *testing.T) {
 	// Once cancelled, ticket 1 leaves nothing behind.
 	p.ok("ticket", "cancel", "1", "--lead", p.token)
 	p.box.calls = nil
-	want = "=== changes\n#1 removed .crew/worktrees/feat/1/login-with-email crew-1 .crew/worktrees/gate/1 crew-1-gate .crew/worktrees/merge/1\n"
+	want = "=== changes\n#1 removed .crew/worktrees/feat/1/login-with-email " + compose.Project(p.main, 1) + " .crew/worktrees/gate/1 " + compose.GateProject(p.main, 1) + " .crew/worktrees/merge/1\n"
 	if out := p.leadStatus(); out != want {
 		t.Fatalf("got\n%swant\n%s", out, want)
 	}
@@ -204,7 +207,7 @@ func TestStatusRemovalFails(t *testing.T) {
 	os.MkdirAll(filepath.Join(p.main, ".crew", "worktrees", "gate", "7"), 0o755)
 	p.box.out, p.box.code = "no such project\n", 1
 	code, out, errOut := p.run("status", "--as", "dm", "--lead", p.token)
-	if code != 1 || !strings.HasPrefix(out, "=== board\n") || errOut != "no such project\ncrew-7-gate down: exit 1\n" {
+	if code != 1 || !strings.HasPrefix(out, "=== board\n") || errOut != "no such project\n"+compose.GateProject(p.main, 7)+" down: exit 1\n" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 	if _, err := os.Stat(filepath.Join(p.main, ".crew", "worktrees", "gate", "7")); err != nil {

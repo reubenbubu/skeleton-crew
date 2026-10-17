@@ -120,10 +120,10 @@ func removeLeftovers(env Env, board []ticket.Summary) ([]ticket.Change, error) {
 			rel := path.Join(".crew", "worktrees", kind, e.Name())
 			switch kind {
 			case "gate":
-				if err := cleanUp(env, r, compose.GateProject(n), dir); err != nil {
+				if err := cleanUp(env, r, compose.GateProject(r, n), dir); err != nil {
 					return done(), err
 				}
-				removed[n] = append(removed[n], rel, compose.GateProject(n))
+				removed[n] = append(removed[n], rel, compose.GateProject(r, n))
 			case "merge":
 				if err := repo.RemoveWorktree(dir); err != nil {
 					return done(), err
@@ -138,10 +138,10 @@ func removeLeftovers(env Env, board []ticket.Summary) ([]ticket.Change, error) {
 					if !sl.IsDir() {
 						continue
 					}
-					if err := cleanUp(env, r, compose.Project(n), filepath.Join(dir, sl.Name())); err != nil {
+					if err := cleanUp(env, r, compose.Project(r, n), filepath.Join(dir, sl.Name())); err != nil {
 						return done(), err
 					}
-					removed[n] = append(removed[n], path.Join(rel, sl.Name()), compose.Project(n))
+					removed[n] = append(removed[n], path.Join(rel, sl.Name()), compose.Project(r, n))
 				}
 				// An empty directory, such as one crew merge leaves, is
 				// removed without a word.

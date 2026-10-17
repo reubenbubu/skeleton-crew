@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
 )
 
@@ -60,12 +61,15 @@ func (p *devProject) statusWrites() []string {
 	return out
 }
 
-func gateCalls(dir string, steps ...string) []string {
-	out := []string{dir + " -p crew-1-gate down --volumes --remove-orphans", dir + " -p crew-1-gate build"}
+// gateCalls are the compose calls of a gate of ticket 1 in the main
+// checkout at main, run in the worktree at dir.
+func gateCalls(main, dir string, steps ...string) []string {
+	g := " -p " + compose.GateProject(main, 1)
+	out := []string{dir + g + " down --volumes --remove-orphans", dir + g + " build"}
 	for _, s := range steps {
-		out = append(out, dir+` -p crew-1-gate run --rm -T app sh -c `+s+` "$@" sh`)
+		out = append(out, dir+g+` run --rm -T app sh -c `+s+` "$@" sh`)
 	}
-	return append(out, dir+" -p crew-1-gate down --volumes --remove-orphans --rmi local")
+	return append(out, dir+g+" down --volumes --remove-orphans --rmi local")
 }
 
 var pythonSteps = []string{"python -m compileall -q src", "ruff check . && ruff format --check .", "pytest -q"}
@@ -89,7 +93,7 @@ func TestSubmitPasses(t *testing.T) {
 	if want := "gate passed " + sha[:7] + "\n#1 stage=4:waiting-review\n"; out != want {
 		t.Fatalf("got %q; want %q", out, want)
 	}
-	if want := gateCalls(dir, pythonSteps...); !slices.Equal(p.box.calls, want) {
+	if want := gateCalls(p.main, dir, pythonSteps...); !slices.Equal(p.box.calls, want) {
 		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(p.box.calls, "\n"), strings.Join(want, "\n"))
 	}
 	if got := p.fake.IssueLabels(1); !slices.Contains(got, "stage:4:waiting-review") || slices.Contains(got, "stage:4:in-progress") {

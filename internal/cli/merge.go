@@ -111,7 +111,7 @@ func runMerge(args []string, env Env) int {
 	}
 	out = append(out, fmt.Sprintf("#%d stage=%s", n, stage))
 	wt := path.Join(".crew", "worktrees", branch)
-	if err := cleanUp(env, r, compose.Project(n), filepath.Join(r, filepath.FromSlash(wt))); err != nil {
+	if err := cleanUp(env, r, compose.Project(r, n), filepath.Join(r, filepath.FromSlash(wt))); err != nil {
 		return done(err, false)
 	}
 	if *asJSON {
@@ -124,7 +124,7 @@ func runMerge(args []string, env Env) int {
 		}{n, sha, rebased, flagged, stage})
 		return finish(env, err, false)
 	}
-	out = append(out, "removed "+wt+" "+compose.Project(n))
+	out = append(out, "removed "+wt+" "+compose.Project(r, n))
 	return done(nil, false)
 }
 

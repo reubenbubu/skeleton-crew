@@ -121,7 +121,7 @@ func doctorGate(env Env, root string, repo *git.Repo, prof profile.Profile, sha 
 	}
 	defer repo.RemoveWorktree(dir)
 	var res gateResult
-	if err := containerSteps(env, root, dir, compose.DoctorProject, "doctor", prof, &res); err != nil {
+	if err := containerSteps(env, root, dir, compose.DoctorProject(root), "doctor", prof, &res); err != nil {
 		return doctor.Failure("gate", err.Error())
 	}
 	if res.failed != "" {

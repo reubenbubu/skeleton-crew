@@ -220,7 +220,7 @@ func runGate(env Env, root string, repo *git.Repo, c *github.Client, number int,
 		return res, nil
 	}
 
-	err = containerSteps(env, root, dir, compose.GateProject(number), "gate-"+strconv.Itoa(number), prof, &res)
+	err = containerSteps(env, root, dir, compose.GateProject(root, number), "gate-"+strconv.Itoa(number), prof, &res)
 	return res, err
 }
 

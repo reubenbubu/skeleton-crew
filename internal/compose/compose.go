@@ -5,6 +5,8 @@ package compose
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -60,21 +62,31 @@ func engine() (string, error) {
 	return "", errors.New("no container engine with compose: install podman or docker")
 }
 
-// Project is the name of ticket number's compose project.
-func Project(number int) string { return fmt.Sprintf("crew-%d", number) }
+// Project is the name of ticket number's compose project in the main
+// checkout at root.
+func Project(root string, number int) string { return fmt.Sprintf("%s-%d", prefix(root), number) }
 
 // GateProject is the name of the compose project the gate uses for ticket
-// number, apart from the Dev's own.
-func GateProject(number int) string { return fmt.Sprintf("crew-%d-gate", number) }
+// number in the main checkout at root, apart from the Dev's own.
+func GateProject(root string, number int) string { return Project(root, number) + "-gate" }
 
 // DoctorProject is the name of the compose project crew doctor's gate
-// uses.
-const DoctorProject = "crew-doctor"
+// uses in the main checkout at root.
+func DoctorProject(root string) string { return prefix(root) + "-doctor" }
+
+// prefix starts every compose project name of the main checkout at root,
+// an absolute path: crew- and the first 8 hex digits of the path's
+// SHA-256. Two checkouts on one engine so never share a project, even for
+// the same ticket number.
+func prefix(root string) string {
+	sum := sha256.Sum256([]byte(root))
+	return "crew-" + hex.EncodeToString(sum[:4])
+}
 
 // Exec runs command, with args appended, in the app container of ticket
-// number's compose project.
-func Exec(run Runner, dir string, number int, command string, args []string) ([]byte, int, error) {
-	return ExecIn(run, dir, Project(number), command, args)
+// number's compose project in the main checkout at root.
+func Exec(run Runner, dir, root string, number int, command string, args []string) ([]byte, int, error) {
+	return ExecIn(run, dir, Project(root, number), command, args)
 }
 
 // ExecIn runs command, with args appended, in a new app container of the

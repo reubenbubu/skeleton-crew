@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reubenbubu/skeleton-crew/internal/compose"
 	"github.com/reubenbubu/skeleton-crew/internal/config"
 	"github.com/reubenbubu/skeleton-crew/internal/github"
 )
@@ -136,7 +137,7 @@ func TestTicketStart(t *testing.T) {
 func TestTicketStartJSON(t *testing.T) {
 	p := newDevProject(t)
 	out := p.start(1, "--tier", "1", "--json")
-	if want := `{"number":1,"stage":"4:in-progress","tier":1,"branch":"feat/1/login-with-email","worktree":"` + worktree + `","compose":"crew-1"}` + "\n"; out != want {
+	if want := `{"number":1,"stage":"4:in-progress","tier":1,"branch":"feat/1/login-with-email","worktree":"` + worktree + `","compose":"` + compose.Project(p.main, 1) + `"}` + "\n"; out != want {
 		t.Fatalf("got %q; want %q", out, want)
 	}
 }
@@ -268,7 +269,7 @@ func TestRedCommitNeedsFailingTests(t *testing.T) {
 	p.write("tests/unit/test_link.py", "# #1-AC1\n")
 	p.box.code = 0
 	p.refused(1, "red: the tests pass; a red step needs failing tests", "commit", "--red", "login rejects an unknown email")
-	want := p.dir + ` -p crew-1 run --rm -T app sh -c pytest -q "$@" sh tests/test_login.py tests/unit/test_link.py`
+	want := p.dir + " -p " + compose.Project(p.main, 1) + ` run --rm -T app sh -c pytest -q "$@" sh tests/test_login.py tests/unit/test_link.py`
 	if !slices.Equal(p.box.calls, []string{want}) {
 		t.Fatalf("calls %q; want %q", p.box.calls, want)
 	}
@@ -333,7 +334,7 @@ func TestGreenCommitNeedsPassingTests(t *testing.T) {
 		t.Fatalf("a refused green step committed: %q", got)
 	}
 	// Green runs every test file the branch has changed since main.
-	want := p.dir + ` -p crew-1 run --rm -T app sh -c pytest -q "$@" sh tests/test_login.py`
+	want := p.dir + " -p " + compose.Project(p.main, 1) + ` run --rm -T app sh -c pytest -q "$@" sh tests/test_login.py`
 	if !slices.Equal(p.box.calls, []string{want}) {
 		t.Fatalf("calls %q; want %q", p.box.calls, want)
 	}
@@ -429,9 +430,10 @@ func TestCommitRefusals(t *testing.T) {
 func TestEnv(t *testing.T) {
 	p := newDevProject(t)
 	p.inWorktree()
+	project := compose.Project(p.main, 1)
 	for _, c := range []struct{ cmd, out, args string }{
-		{"up", "crew-1 up\n", "-p crew-1 up -d"},
-		{"down", "crew-1 down\n", "-p crew-1 down --volumes"},
+		{"up", project + " up\n", "-p " + project + " up -d"},
+		{"down", project + " down\n", "-p " + project + " down --volumes"},
 	} {
 		p.box.calls = nil
 		if out := p.ok("env", c.cmd); out != c.out {
@@ -446,7 +448,7 @@ func TestEnv(t *testing.T) {
 	if code != 0 || out != "app  | started\n" || errOut != "" {
 		t.Fatalf("env logs: code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
-	if want := p.dir + " -p crew-1 logs --no-color"; !slices.Equal(p.box.calls, []string{want}) {
+	if want := p.dir + " -p " + project + " logs --no-color"; !slices.Equal(p.box.calls, []string{want}) {
 		t.Fatalf("calls %q; want %q", p.box.calls, want)
 	}
 	p.box.out, p.box.code = "Error: no such image\n", 125
@@ -467,7 +469,7 @@ func TestRun(t *testing.T) {
 	if code != 0 || out != "3 passed\n" || errOut != "" {
 		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
-	if want := p.dir + ` -p crew-1 run --rm -T app sh -c pytest -q "$@" sh -k login tests/test_login.py`; !slices.Equal(p.box.calls, []string{want}) {
+	if want := p.dir + " -p " + compose.Project(p.main, 1) + ` run --rm -T app sh -c pytest -q "$@" sh -k login tests/test_login.py`; !slices.Equal(p.box.calls, []string{want}) {
 		t.Fatalf("calls %q; want %q", p.box.calls, want)
 	}
 	// The command's exit code is crew's.
@@ -491,7 +493,7 @@ func TestRunCustomProfile(t *testing.T) {
 	if code, out, errOut := p.run("run", "test-changed", "test/login_test.exs"); code != 0 || out != "ok\n" || errOut != "" {
 		t.Fatalf("got code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
-	if want := p.dir + ` -p crew-1 run --rm -T app sh -c mix test --stale "$@" sh test/login_test.exs`; p.box.calls[len(p.box.calls)-1] != want {
+	if want := p.dir + " -p " + compose.Project(p.main, 1) + ` run --rm -T app sh -c mix test --stale "$@" sh test/login_test.exs`; p.box.calls[len(p.box.calls)-1] != want {
 		t.Fatalf("calls %q; want %q", p.box.calls, want)
 	}
 	p.refused(1, "the elixir profile has no build command", "run", "build")
