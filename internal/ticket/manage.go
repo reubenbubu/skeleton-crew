@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -35,7 +36,7 @@ func Retry(c *github.Client, number, maxTier, topAttempts int) (int, error) {
 		return 0, stageChanged(number, f.Stage, "4:review-rejected")
 	}
 	if f.Blocked {
-		return 0, fmt.Errorf("blocked: #%d waits for the user; crew ticket unblock %d once they have answered", number, number)
+		return 0, errors.New(blocked(number))
 	}
 	tier, err := strconv.Atoi(f.Tier)
 	if err != nil {

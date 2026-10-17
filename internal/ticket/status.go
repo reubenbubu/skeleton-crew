@@ -2,6 +2,7 @@ package ticket
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -356,14 +357,14 @@ func Next(c *github.Client) ([]Summary, error) {
 	}
 	var next []github.Issue
 	for _, i := range issues {
-		if f := fieldsOf(i); f.Stage != "3:eligible" || f.Blocked {
+		if f := fieldsOf(i); f.Stage != "3:eligible" {
 			continue
 		}
-		deps, err := c.BlockedBy(i.Number)
+		why, err := waits(c, i)
 		if err != nil {
 			return nil, err
 		}
-		if !slices.ContainsFunc(deps, func(d github.Issue) bool { return !done(d) }) {
+		if why == "" {
 			next = append(next, i)
 		}
 	}
@@ -382,6 +383,34 @@ func Next(c *github.Client) ([]Summary, error) {
 		out = append(out, Summary{Number: i.Number, Title: i.Title, Fields: fieldsOf(i)})
 	}
 	return out, nil
+}
+
+// waits returns why ticket i cannot start yet, as a refusal, or "" when it
+// can: it is blocked, or a ticket it is blocked by is not done. Selection
+// and crew ticket start share it.
+func waits(c *github.Client, i github.Issue) (string, error) {
+	if fieldsOf(i).Blocked {
+		return blocked(i.Number), nil
+	}
+	deps, err := c.BlockedBy(i.Number)
+	if err != nil {
+		return "", err
+	}
+	var open []string
+	for _, d := range deps {
+		if !done(d) {
+			open = append(open, fmt.Sprintf("#%d", d.Number))
+		}
+	}
+	if len(open) > 0 {
+		return fmt.Sprintf("dependency-open: #%d is blocked by %s, not done", i.Number, strings.Join(open, " ")), nil
+	}
+	return "", nil
+}
+
+// blocked is the refusal for blocked ticket number.
+func blocked(number int) string {
+	return fmt.Sprintf("blocked: #%d waits for the user; crew ticket unblock %d once they have answered", number, number)
 }
 
 // done reports whether issue i is closed as completed.

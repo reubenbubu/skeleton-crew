@@ -165,7 +165,7 @@ The stage is always one clearly defined state. Its number never decreases; `crew
 | `0:cancelled` | — | Will not be done; closed as not planned |
 
 - Without continuous deployment, a ticket goes from `7:merged` straight to `9:done`.
-- `blocked` is a flag, not a stage. A blocked ticket keeps its stage and is skipped by selection.
+- `blocked` is a flag, not a stage. A blocked ticket keeps its stage and is skipped by selection, and `crew ticket start` refuses it.
 - Every stage has one owner and an expected dwell time. `crew status` flags tickets that sit too long, for example `#12 4:waiting-review since 2026-10-15T09:12Z: no reviewer`. This catches dropped handoffs without any background process.
 - **Merge conflicts** at `6:pending-merge` stay at stage 6. The DM resolves trivial conflicts such as lockfiles and version lines itself.
 - **Anything else at stage 6 goes forward through a new ticket:** a conflict that is not trivial, or a gate that fails after the rebase. No Dev works at stage 6, because stages never go back to 4 and Devs never rebase. The DM cancels the ticket and opens a new one with `crew ticket new`, at `2:drafting`. Its `Assumptions` name the cancelled ticket and its branch, `origin/<branch>`, which the new ticket's Dev may read to reuse the work. The PM copies the goal and writes the criteria under the new number. Tests that name the cancelled ticket's criteria are flagged by the gate as `cancelled`, and the new ticket's Dev renames them to the new criteria, with failing tests first as usual.
@@ -264,7 +264,7 @@ The PM's sections are `changes`, `waiting for the user`, `intake`, `drafting`, `
 
 ## Selecting work
 
-`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done, one line each as `crew ticket list` prints them. Dependencies use GitHub's own issue dependencies ("blocked by"), which `crew ticket edit` sets. A dependency is done when its issue is closed as completed; a cancelled dependency keeps the ticket out of the list until the dependency is removed. They are sorted by priority, from `critical` to `low`, then by age, oldest first.
+`crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done, one line each as `crew ticket list` prints them. Dependencies use GitHub's own issue dependencies ("blocked by"), which `crew ticket edit` sets. A dependency is done when its issue is closed as completed; a cancelled dependency keeps the ticket out of the list until the dependency is removed. They are sorted by priority, from `critical` to `low`, then by age, oldest first. `crew ticket start` applies the same check, so a ticket blocked after it was selected cannot start: it is refused, changing nothing, with one line such as `blocked: #14 waits for the user; crew ticket unblock 14 once they have answered` or `dependency-open: #14 is blocked by #9 #11, not done`.
 
 - By default the DM takes the first one.
 - The DM may skip down the list when the top ticket would collide with work in flight, for example two tickets that both change the same module. It records the reason as a `log` comment.
@@ -754,7 +754,7 @@ There is no generic "set stage" command. Each stage change has exactly one comma
 | `crew events [--wait [--test]] --lead <token>` | Reports what changed since the previous call; the signal for harness wiring. `--wait` blocks until something is unread, without marking it read; `--test` exits after a few seconds as if an event had arrived |
 | `crew dm wiring <harness> --wait \| --own "<how to start it>" [--file <path>]... --lead <token>` | Records the harness's wiring in `.crew/crew.toml` and commits it, with the wiring's files, to `main` |
 | `crew ticket next` | Lists eligible tickets in order |
-| `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress` and sets `tier:<rank>`; creates the branch and worktree, and names the compose project `crew-<id>-<n>`; refused at the parallel cap |
+| `crew ticket start <n> --tier <rank>` | `3:eligible` to `4:in-progress` and sets `tier:<rank>`; creates the branch and worktree, and names the compose project `crew-<id>-<n>`; refused at the parallel cap, and for a ticket that is blocked or has a dependency that is not done |
 | `crew ticket appeal <n> "<reason>"` | `4:review-rejected` to `4:waiting-review` for a second, independent Reviewer, and posts the reason as a `review` comment by `dm`; one appeal per attempt, refused when the attempt ended with `crew ticket stuck` |
 | `crew ticket retry <n>` | `4:review-rejected` to `4:in-progress`, one rank up to at most `max_tier`; enforces `top_attempts` |
 | `crew ticket split <n> "<title>" "<title>"...` | Creates one child ticket per title, at least two, at `2:drafting`, for the PM to complete, and cancels the parent |

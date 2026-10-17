@@ -195,6 +195,37 @@ func TestTicketStartRefusals(t *testing.T) {
 	}
 }
 
+// #24-AC1 #24-AC2 #24-AC3: start refuses what selection skips, changing
+// nothing, until the blocker is cleared and the dependencies are done.
+func TestTicketStartRefusesWaitingTickets(t *testing.T) {
+	p := newDevProject(t)
+	refused := func(msg string) {
+		t.Helper()
+		before := len(p.writes())
+		p.refused(1, msg, "ticket", "start", "1", "--tier", "1", "--lead", p.token)
+		if w := p.writes()[before:]; len(w) != 0 {
+			t.Fatalf("a refused start wrote: %q", w)
+		}
+		if _, err := os.Stat(filepath.Join(p.main, ".crew/worktrees")); err == nil {
+			t.Fatal("a refused start made a worktree")
+		}
+	}
+	p.ok("ticket", "block", "1", "--as", "dm", "Which payment provider?")
+	refused("blocked: #1 waits for the user; crew ticket unblock 1 once they have answered")
+	p.ok("ticket", "unblock", "1")
+
+	p.newIssue("Dependency", staged("4:in-progress")...)
+	p.newIssue("Cancelled", staged("0:cancelled")...)
+	p.blockedBy(1, 2)
+	p.blockedBy(1, 3)
+	p.close(3, "not_planned")
+	refused("dependency-open: #1 is blocked by #2 #3, not done")
+	p.close(2, "completed")
+	refused("dependency-open: #1 is blocked by #3, not done")
+	p.ok("ticket", "edit", "1", "--remove-dependency", "3")
+	p.start(1, "--tier", "1")
+}
+
 func TestSlug(t *testing.T) {
 	p := newDevProject(t)
 	for n, c := range []struct{ title, branch string }{

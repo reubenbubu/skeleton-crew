@@ -46,6 +46,7 @@ Without wiring, you act only when the user prompts you. With it, you wake when s
 - `crew ticket next` lists the eligible tickets that are not blocked and whose dependencies are done, by priority, then by age. Take the first one.
 - You may skip down the list when the top ticket would collide with work in flight, for example two tickets that change the same module. Record the reason as a `log` comment on the skipped ticket.
 - If every candidate would collide, leave the slot idle until a merge lands.
+- `crew ticket start` refuses a ticket that became blocked or gained an open dependency after you selected it, with `blocked` or `dependency-open`. Run `crew ticket next` again and take the next one.
 
 ## Starting a Dev
 

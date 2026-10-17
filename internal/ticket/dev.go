@@ -1,6 +1,7 @@
 package ticket
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -57,8 +58,8 @@ func ParseBranch(branch string) (kind string, number int, ok bool) {
 	return m[1], n, err == nil
 }
 
-// Eligible reads ticket number, which must be at 3:eligible and have a
-// kind.
+// Eligible reads ticket number, which must be at 3:eligible, have a kind,
+// and be one that selection lists: not blocked, with its dependencies done.
 func Eligible(c *github.Client, number int) (github.Issue, Fields, error) {
 	i, f, err := get(c, number)
 	if err != nil {
@@ -70,7 +71,11 @@ func Eligible(c *github.Client, number int) (github.Issue, Fields, error) {
 	if !slices.Contains(Kinds, f.Kind) {
 		return i, f, fmt.Errorf("#%d has no single kind: kind=%s", number, f.Kind)
 	}
-	return i, f, nil
+	why, err := waits(c, i)
+	if err == nil && why != "" {
+		err = errors.New(why)
+	}
+	return i, f, err
 }
 
 // InFlight lists the open tickets at a stage 4, which each hold one of the
